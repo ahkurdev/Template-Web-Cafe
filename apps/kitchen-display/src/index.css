@@ -1,0 +1,23 @@
+@import 'tailwindcss';
+
+/* Mode gelap default: layar dapur menyala terus, dibaca dari 1,5 meter. */
+@theme {
+  --color-bg: #0c0a09;
+  --color-surface: #1c1917;
+  --color-fg: #fafaf9;
+  --color-muted: #a8a29e;
+  --color-accent: #f59e0b;
+  --color-border: #292524;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 18px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}

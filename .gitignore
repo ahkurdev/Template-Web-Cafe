@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+uploads/
+logs/
+*.log
+.DS_Store
+.vite/
+coverage/
+*.local
+*.tsbuildinfo
+
+# Lokal AI agent — aturan repo yang dibagikan ada di docs/agent.md
+.claude/
+CLAUDE.md

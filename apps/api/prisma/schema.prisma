@@ -1,0 +1,235 @@
+// Skema DB — sumber tunggal. Penjelasan & alasan di docs/database.md.
+// Provider mysql = MariaDB 11. PK nanoid dari aplikasi (bukan autoincrement).
+// Uang = Int rupiah penuh. Waktu = DateTime(3) UTC.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  kasir
+  dapur
+}
+
+enum OrderStatus {
+  baru
+  dikonfirmasi
+  diproses
+  selesai
+  diambil
+  dibatalkan
+}
+
+enum OrderType {
+  dine_in
+  takeaway
+}
+
+enum PaymentStatus {
+  belum_bayar
+  lunas
+  dibatalkan
+}
+
+enum PaymentMethod {
+  cash
+  transfer
+  qris_manual
+}
+
+enum TableStatus {
+  tersedia
+  terisi
+  nonaktif
+}
+
+model Outlet {
+  id        String   @id @db.VarChar(21)
+  name      String   @db.VarChar(120)
+  address   String?  @db.Text
+  phone     String?  @db.VarChar(30)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+
+  users      User[]
+  categories Category[]
+  menuItems  MenuItem[]
+  tables     CafeTable[]
+  orders     Order[]
+  settings   Settings?
+
+  @@map("outlets")
+}
+
+model User {
+  id           String    @id @db.VarChar(21)
+  outletId     String    @db.VarChar(21)
+  username     String    @unique @db.VarChar(50)
+  passwordHash String    @db.VarChar(255)
+  name         String    @db.VarChar(120)
+  role         Role
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime? @db.DateTime(3)
+  createdAt    DateTime  @default(now()) @db.DateTime(3)
+  updatedAt    DateTime  @updatedAt @db.DateTime(3)
+
+  outlet Outlet       @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  orders Order[]
+  events OrderEvent[]
+
+  @@index([outletId, role])
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @db.VarChar(21)
+  outletId  String   @db.VarChar(21)
+  name      String   @db.VarChar(80)
+  slug      String   @db.VarChar(80)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+
+  outlet Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  items  MenuItem[]
+
+  @@unique([outletId, slug])
+  @@index([outletId, isActive, sortOrder])
+  @@map("categories")
+}
+
+model MenuItem {
+  id          String   @id @db.VarChar(21)
+  outletId    String   @db.VarChar(21)
+  categoryId  String   @db.VarChar(21)
+  name        String   @db.VarChar(150)
+  description String?  @db.Text
+  price       Int
+  imageUrl    String?  @db.VarChar(255)
+  isAvailable Boolean  @default(true)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  updatedAt   DateTime @updatedAt @db.DateTime(3)
+
+  outlet     Outlet      @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([categoryId, isActive, sortOrder])
+  @@index([outletId, isAvailable])
+  @@map("menu_items")
+}
+
+model CafeTable {
+  id        String      @id @db.VarChar(21)
+  outletId  String      @db.VarChar(21)
+  number    String      @db.VarChar(20)
+  capacity  Int?
+  location  String?     @db.VarChar(80)
+  qrToken   String      @unique @db.VarChar(32)
+  status    TableStatus @default(tersedia)
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now()) @db.DateTime(3)
+  updatedAt DateTime    @updatedAt @db.DateTime(3)
+
+  outlet Outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@unique([outletId, number])
+  @@map("cafe_tables")
+}
+
+model Order {
+  id             String         @id @db.VarChar(21)
+  outletId       String         @db.VarChar(21)
+  orderCode      String         @unique @db.VarChar(20)
+  tableId        String?        @db.VarChar(21)
+  type           OrderType      @default(dine_in)
+  status         OrderStatus    @default(baru)
+  customerName   String?        @db.VarChar(80)
+  note           String?        @db.Text
+  subtotal       Int
+  taxAmount      Int            @default(0)
+  serviceAmount  Int            @default(0)
+  discountAmount Int            @default(0)
+  total          Int
+  paymentStatus  PaymentStatus  @default(belum_bayar)
+  paymentMethod  PaymentMethod?
+  paidAmount     Int?
+  changeAmount   Int?
+  paidAt         DateTime?      @db.DateTime(3)
+  createdById    String?        @db.VarChar(21)
+  createdAt      DateTime       @default(now()) @db.DateTime(3)
+  updatedAt      DateTime       @updatedAt @db.DateTime(3)
+
+  outlet    Outlet       @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  table     CafeTable?   @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  createdBy User?        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items     OrderItem[]
+  events    OrderEvent[]
+
+  @@index([status, createdAt])
+  @@index([paidAt])
+  @@index([paymentStatus, createdAt])
+  @@index([tableId, createdAt])
+  @@index([outletId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String   @id @db.VarChar(21)
+  orderId       String   @db.VarChar(21)
+  menuItemId    String?  @db.VarChar(21)
+  nameSnapshot  String   @db.VarChar(150)
+  priceSnapshot Int
+  qty           Int
+  subtotal      Int
+  note          String?  @db.VarChar(200)
+  createdAt     DateTime @default(now()) @db.DateTime(3)
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("order_items")
+}
+
+model OrderEvent {
+  id        String      @id @db.VarChar(21)
+  orderId   String      @db.VarChar(21)
+  status    OrderStatus
+  note      String?     @db.VarChar(200)
+  actorId   String?     @db.VarChar(21)
+  createdAt DateTime    @default(now()) @db.DateTime(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
+}
+
+model Settings {
+  id               String   @id @db.VarChar(21)
+  outletId         String   @unique @db.VarChar(21)
+  taxPercent       Int      @default(0)
+  servicePercent   Int      @default(0)
+  receiptFooter    String?  @db.Text
+  currencySymbol   String   @default("Rp") @db.VarChar(5)
+  autoConfirmOrder Boolean  @default(false)
+  updatedAt        DateTime @updatedAt @db.DateTime(3)
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}

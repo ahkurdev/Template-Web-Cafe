@@ -1,0 +1,26 @@
+{
+  "name": "web-cafe",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "prisma": {
+    "schema": "apps/api/prisma/schema.prisma",
+    "seed": "tsx apps/api/prisma/seed.ts"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -F @cafe/shared build && pnpm -r build",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "test": "pnpm -r test",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "db:generate": "prisma generate"
+  },
+  "devDependencies": {
+    "prisma": "6.3.1",
+    "tsx": "4.19.2"
+  }
+}

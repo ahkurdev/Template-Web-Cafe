@@ -1,0 +1,36 @@
+# Ganti cafe.example.com dengan domain Anda. TLS otomatis via Let's Encrypt.
+cafe.example.com {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy localhost:3000
+	}
+
+	# Caddy meneruskan upgrade WebSocket otomatis, tanpa header tambahan.
+	handle /socket.io/* {
+		reverse_proxy localhost:3000
+	}
+
+	handle /uploads/* {
+		reverse_proxy localhost:3000
+	}
+
+	handle /kasir* {
+		root * /var/www/web-cafe/apps/kasir/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	handle /kds* {
+		root * /var/www/web-cafe/apps/kitchen-display/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Menu pelanggan di root — paling sering diakses.
+	handle {
+		root * /var/www/web-cafe/apps/customer-menu/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
