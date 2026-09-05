@@ -20,7 +20,8 @@ Repo ini masih dibangun bertahap. Yang sudah jalan dan terverifikasi:
 - ✅ **Kasir** — login + guard role, order aktif realtime + bunyi, detail + timeline, pembayaran & kembalian, kasir manual, struk 58/80mm, CRUD menu + foto + toggle habis, CRUD meja + cetak QR. Bundle 128KB gzip
 - ✅ **Kitchen Display** — 3 kolom, kartu besar + catatan berlatar, timer & warna menua, bunyi order baru, aksi satu tap, indikator koneksi, wake lock. Bundle 114KB gzip
 - ✅ **Laporan & admin** — kartu ringkasan, preset rentang, grafik omzet SVG, menu terlaris, metode bayar, export CSV, manajemen user, pengaturan
-- 🚧 **Deployment** — `Caddyfile` + `ecosystem.config.cjs` sudah ada, `scripts/backup.sh` belum; belum diuji di VPS bersih
+- ✅ **Deployment** — `Caddyfile`, `ecosystem.config.cjs`, `scripts/backup.sh` (restore sudah diuji ke DB terpisah), checklist keamanan
+- 🚧 **Uji VPS bersih** — belum dikerjakan; butuh server
 
 48 test lulus (14 api + 12 shared + 15 kasir + 7 kds). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
 
@@ -135,6 +136,20 @@ Yang wajib diingat:
 - **`instances: 1` di PM2.** Socket.io multi-proses butuh adapter Redis; tanpa itu order baru cuma sampai ke klien yang kebetulan terhubung ke proses yang sama.
 - **`trustProxy: true` di Fastify** (sudah diset). Tanpa itu, di belakang Caddy semua request terlihat dari `127.0.0.1` dan satu pelanggan menghabiskan kuota rate limit semua orang.
 
+Jalankan [checklist keamanan](./docs/keamanan.md) sebelum sistem menghadap internet.
+
+### Backup
+
+```bash
+# uji dulu
+BACKUP_DIR=/tmp/uji-backup ./scripts/backup.sh
+
+# cron harian 02.15
+15 2 * * * /var/www/web-cafe/scripts/backup.sh >> /var/log/webcafe-backup.log 2>&1
+```
+
+Dump di-validasi (ukuran + `gzip -t`) sebelum rotasi, jadi backup rusak tidak menghapus backup lama. Prosedur restore ada sebagai komentar di bawah `scripts/backup.sh` — **uji restore sekali** sebelum mengandalkannya, dan simpan salinan di luar VPS.
+
 ## Dokumentasi
 
 | Dokumen | Isi |
@@ -144,6 +159,7 @@ Yang wajib diingat:
 | [database.md](./docs/database.md) | tabel, kolom, relasi, index, catatan portabilitas |
 | [api.md](./docs/api.md) | endpoint REST per module, event socket + room/payload, format response, rate limit |
 | [roadmap.md](./docs/roadmap.md) | fase build berurutan + *definition of done* |
+| [keamanan.md](./docs/keamanan.md) | checklist pra-publik: rute publik, batas role, upload, rate limit + item VPS yang wajib dicek |
 | [agent.md](./docs/agent.md) | aturan repo untuk AI agent yang melanjutkan kerja di sini |
 
 ## Kontribusi

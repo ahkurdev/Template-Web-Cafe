@@ -1,7 +1,7 @@
 # Roadmap & Instruksi Build — Sistem Cafe
 
 **Update**: 2026-09-04
-Pembaca: Claude Code (saya sendiri) di sesi berikutnya. Kerjakan berurutan. Jangan lompat fase.
+Pembaca: agent yang melanjutkan repo ini (sesi berikutnya). Kerjakan berurutan. Jangan lompat fase.
 
 ## Aturan eksekusi
 
@@ -24,7 +24,8 @@ Pembaca: Claude Code (saya sendiri) di sesi berikutnya. Kerjakan berurutan. Jang
 - **Fase 4** selesai — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar.
 - **Fase 5** selesai — KDS: login, 3 kolom, kartu besar + catatan berlatar, timer + warna menua, bunyi, aksi satu tap optimistic, indikator koneksi, wakeLock. Bundle 114KB gzip.
 - **Fase 6** selesai — laporan (kartu ringkasan, preset rentang, grafik SVG, terlaris, metode bayar, export CSV), manajemen user, pengaturan. Bundle kasir 128KB gzip.
-- **Berikutnya**: Fase 7 (deployment & dokumentasi) — `scripts/backup.sh` dan uji pasang di VPS bersih yang belum ada.
+- **Fase 7** sebagian — `scripts/backup.sh` (restore terbukti), README, LICENSE, checklist keamanan 14 item terverifikasi. **Belum**: uji pasang di VPS bersih (butuh server), screenshot README.
+- **Berikutnya**: uji VPS saat server tersedia, lalu Fase 8 (nice to have).
 
 Total 48 test lulus (14 api + 12 shared + 15 kasir + 7 kds).
 
@@ -210,17 +211,21 @@ Nama/alamat/telepon cafe belum bisa diubah dari UI — masih di tabel `outlets`,
 
 **Tujuan**: orang lain bisa memasang sistem ini di VPS bersih dalam < 15 menit, tanpa Docker.
 
-1. `ecosystem.config.cjs` (`instances: 1`, `max_memory_restart: 400M`).
-2. `Caddyfile` sesuai [arsitektur.md](./arsitektur.md) — `/api`, `/socket.io`, `/uploads`, `/kasir`, `/kds`, root.
-3. `.env.example` lengkap dengan komentar tiap variabel.
-4. `scripts/backup.sh` — `mariadb-dump --single-transaction --quick` + `tar` uploads. Contoh baris cron.
-5. `README.md`: fitur + screenshot, prasyarat (termasuk **swap 2GB** dan tuning `my.cnf`), pasang lokal, pasang VPS, backup/restore, update, troubleshooting.
-6. `LICENSE` MIT.
-7. `docs/agent.md` + copy ke root sebagai `CLAUDE.md` — perintah, aturan repo, jebakan.
-8. Uji di VPS bersih (atau VM) ikut README apa adanya. Setiap langkah yang macet → perbaiki README, bukan diakali manual.
-9. Cek keamanan sebelum publik: DB user non-root, `bind-address=127.0.0.1`, `JWT_SECRET` acak, rate limit aktif, `trustProxy` aktif, tidak ada kredensial di git (`git log -p | grep -i password`).
+1. ✅ `ecosystem.config.cjs` (`instances: 1`, `max_memory_restart: 400M`).
+2. ✅ `Caddyfile` — `/api`, `/socket.io`, `/uploads`, `/kasir`, `/kds`, root.
+3. ✅ `.env.example` lengkap dengan komentar tiap variabel.
+4. ✅ `scripts/backup.sh` — `mariadb-dump --single-transaction --quick` + `tar` uploads, validasi dump sebelum rotasi, contoh baris cron, prosedur restore. **Terverifikasi**: dijalankan sungguhan → dump 10 tabel, di-restore ke DB terpisah (6 order / 8 menu / 1 user / 5 meja cocok, 12 `CHECK` constraint ikut).
+5. ✅ `README.md`: fitur, status per fase, prasyarat, pasang lokal, ringkasan deploy + 5 jebakan wajib, index docs, aturan kontribusi. **Belum ada**: screenshot.
+6. ✅ `LICENSE` MIT.
+7. ✅ `docs/agent.md` + `CLAUDE.md` di root (gitignored — aturan yang dibagikan ada di `docs/agent.md` yang terversi).
+8. ⬜ **Uji di VPS bersih ikut README apa adanya.** Butuh server; belum dikerjakan.
+9. ✅ Cek keamanan pra-publik → [keamanan.md](./keamanan.md), 14 item diverifikasi terhadap dev lokal + 11 item VPS yang menunggu server.
 
 **DoD**: VPS bersih → ikut README → tiga app terbuka lewat HTTPS, order dari HP masuk ke KDS. Restore backup ke DB kosong berhasil (jangan percaya backup yang belum pernah di-restore).
+
+**Status DoD**: restore backup ✅ terbukti. Uji VPS ⬜ menunggu server.
+
+Satu bug ketemu saat audit keamanan dan diperbaiki: upload dengan mime dipalsukan (`.sh` dikirim sebagai `image/png`) menghasilkan **500** dengan pesan internal `sharp` bocor ke klien. Sekarang `sharp` dibungkus `try/catch` → **400** `VALIDATION_FAILED`. File rusak adalah kesalahan klien, bukan kesalahan server, dan upload iseng tidak boleh mengisi log error.
 
 ## Fase 8 — Nice to have (jangan mulai sebelum Fase 1–7 selesai)
 

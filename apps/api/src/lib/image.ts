@@ -28,12 +28,22 @@ export const simpanGambarMenu = async (
   const dir = join(env.UPLOAD_DIR, 'menu');
   await mkdir(dir, { recursive: true });
 
-  // sharp memvalidasi isi file, bukan cuma mime yang dikirim klien.
-  const hasil = await sharp(buffer)
-    .rotate()
-    .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80 })
-    .toBuffer();
+  // sharp memvalidasi isi file, bukan cuma mime yang dikirim klien — mime
+  // gampang dipalsukan. Kegagalannya diubah jadi 400: file rusak/bukan gambar
+  // adalah kesalahan klien. Tanpa ini jadi 500 "unhandled error", pesan internal
+  // sharp bocor ke klien di dev, dan log error terisi upload iseng.
+  let hasil: Buffer;
+  try {
+    hasil = await sharp(buffer)
+      .rotate()
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+  } catch {
+    throw new AppError('VALIDATION_FAILED', 400, 'File bukan gambar yang bisa dibaca', {
+      file: 'rusak atau bukan gambar',
+    });
+  }
 
   await writeFile(join(dir, `${menuItemId}.webp`), hasil);
   // Cache-buster: nama file tetap sama saat foto diganti.
