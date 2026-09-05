@@ -21,7 +21,8 @@ Pembaca: Claude Code (saya sendiri) di sesi berikutnya. Kerjakan berurutan. Jang
 - **Fase 1** selesai — monorepo, `packages/shared`, Prisma schema + migrasi + seed, 3 app Vite, `/api/health` → `{"status":"ok","db":"ok"}`.
 - **Fase 2** selesai — 7 module backend, Socket.io, alur penuh terverifikasi lewat HTTP + socket. `pnpm typecheck`/`test`/`build` lulus (26 test).
 - **Fase 3** selesai — customer-menu: resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip.
-- **Berikutnya**: Fase 4 (frontend kasir).
+- **Fase 4** sebagian — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar. Bundle 123KB gzip, 33 test lulus. **Belum**: laporan, manajemen user, pengaturan (jadi Fase 6).
+- **Berikutnya**: Fase 5 (kitchen display).
 
 Catatan implementasi yang menyimpang/melengkapi dokumen:
 - `order.pricing.ts` dipisah dari `order.service.ts` supaya logika harga bisa diuji tanpa DB.
@@ -31,6 +32,12 @@ Catatan implementasi yang menyimpang/melengkapi dokumen:
 - Tailwind 4.3.3 (4.0.6 gagal build).
 - Bundle `customer-menu` 117KB gzip — di bawah target PRD 200KB.
 - `qrToken` disimpan di `sessionStorage` dan dibuang dari URL (`history.replaceState`) supaya tidak ikut ter-share saat pelanggan mengirim link.
+- Kasir: cetak dikendalikan kelas `.cetak` (+ `.cetak--58`, `.cetak--lembar`), bukan `id="struk"` — satu halaman bisa punya beberapa area cetak (struk, QR tunggal, lembar QR). `@media print` juga menetralkan `dialog` + `::backdrop`, kalau tidak, cetak dari dalam modal menghasilkan halaman kosong.
+- Bunyi order baru dibangkitkan WebAudio (dua nada), bukan file audio — hemat satu request dan tidak ada aset yang harus dijaga. Butuh tombol "Aktifkan suara" sekali karena kebijakan autoplay browser.
+- Listener `order:*` dipasang sekali di `Layout` (`usePantauOrder`), bukan per halaman: dua listener berarti bunyi notifikasi dobel.
+- QR di kasir diambil lewat `fetch` → object URL, karena `<img src>` tidak bisa mengirim header `Authorization`.
+- `api.ts` kasir memaksa ke `/kasir/login` saat 401 **hanya** kalau token ada — tanpa cek itu, login yang gagal (401 tanpa token) ikut memicu reload dan pesan error tidak pernah terlihat.
+- Halaman kasir manual menghitung total dengan `hitungTotal` dari `@cafe/shared` (helper yang sama dengan server) supaya tombol "Buat & Lunas" tidak bisa ditekan dengan uang kurang. Server tetap sumber kebenaran.
 
 ## Fase 0 — Prasyarat lokal (sekali, sebelum Fase 1)
 
@@ -135,17 +142,19 @@ Wajib di app ini: target sentuh ≥ 44px, kontras ≥ 4.5:1, skeleton saat load,
 
 **Tujuan**: kasir bisa menjalankan satu shift penuh dari app ini.
 
-1. `/login` → simpan JWT (`localStorage`) + `ProtectedRoute` per role. 401 dari API → tendang ke login.
-2. Layout dengan sidebar: Order Aktif · Kasir Manual · Menu · Meja · Laporan · Pengaturan (Menu/Meja/Pengaturan hanya `admin`).
-3. **Order Aktif** — kartu/tabel dari `GET /orders/active`, badge status & pembayaran, listener `order:new` (+ bunyi notifikasi), `order:updated`, `order:paid`.
-4. **Detail order** — item, total, timeline event, tombol status, tombol batal (wajib alasan).
-5. **Pembayaran** — modal: pilih metode, input uang diterima (`cash`), kembalian dihitung live, tombol cepat 50k/100k. Kurang → tampilkan error 409 apa adanya.
-6. **Kasir manual** — pilih menu, keranjang, meja opsional, `POST /orders/manual`, opsi langsung lunas.
-7. **Cetak struk** — komponen 58mm/80mm + `@media print` (sembunyikan seluruh UI kecuali struk), `window.print()`. Uji di printer thermal nyata kalau ada.
-8. **Manajemen menu** (admin) — CRUD kategori & item, upload foto (preview + progress), toggle habis paling menonjol karena paling sering dipakai.
-9. **Manajemen meja** (admin) — CRUD, QR preview, tombol cetak semua QR (grid siap potong), regenerate token dengan konfirmasi eksplisit (QR tercetak jadi mati).
+1. ✅ `/login` → simpan JWT (`localStorage`) + `ButuhLogin` per role. 401 dari API → tendang ke login.
+2. ✅ Layout dengan sidebar: Order Aktif · Kasir Manual · Menu · Meja (Menu/Meja hanya `admin`). Laporan & Pengaturan menyusul di Fase 6.
+3. ✅ **Order Aktif** — kartu dari `GET /orders/active`, badge status & pembayaran, listener `order:new` (+ bunyi notifikasi), `order:updated`, `order:paid`, `order:cancelled`.
+4. ✅ **Detail order** — item, total, timeline event, tombol status dari `TRANSISI_SAH`, tombol batal (wajib alasan).
+5. ✅ **Pembayaran** — modal: pilih metode, input uang diterima (`cash`), kembalian dihitung live, tombol cepat 1k–100k + "Pas". Kurang → tombol mati + selisih ditampilkan; error 409 server tampil apa adanya.
+6. ✅ **Kasir manual** — cari menu, keranjang, meja opsional, `POST /orders/manual`, opsi langsung lunas.
+7. ✅ **Cetak struk** — komponen 58mm/80mm + `@media print`, `window.print()`. **Belum diuji di printer thermal nyata** — baru print preview.
+8. ✅ **Manajemen menu** (admin) — CRUD kategori & item, upload foto, toggle habis paling menonjol (optimistic update).
+9. ✅ **Manajemen meja** (admin) — CRUD, QR preview, cetak semua QR (grid siap potong), regenerate token dengan konfirmasi eksplisit.
 
 **DoD**: satu shift simulasi: login → terima order pelanggan → konfirmasi → bayar cash dengan kembalian → cetak (print preview benar) → toggle satu menu habis dan lihat efeknya di HP pelanggan yang masih terbuka.
+
+**Terverifikasi** (backend + socket, lewat HTTP & klien socket nyata): login → order manual 2 item = Rp 55.000, bayar cash Rp 100.000 → kembalian Rp 45.000 · bayar ulang → 409 `ORDER_ALREADY_PAID` · uang kurang → 409 `PAYMENT_INSUFFICIENT` · payload `/receipt` lengkap · klien kasir menerima `order:new` + `order:updated`, klien pelanggan menerima `menu:availability` dua arah. **Belum diverifikasi**: klik-per-klik di browser dan cetak ke printer thermal fisik.
 
 ## Fase 5 — Frontend Kitchen Display
 

@@ -1,36 +1,52 @@
-import { useQuery } from '@tanstack/react-query';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { ButuhLogin, Layout } from './components/Layout.js';
+import HalamanLogin from './pages/HalamanLogin.js';
+import HalamanOrderAktif from './pages/HalamanOrderAktif.js';
+import HalamanKasirManual from './pages/HalamanKasirManual.js';
+import HalamanMenu from './pages/HalamanMenu.js';
+import HalamanMeja from './pages/HalamanMeja.js';
 
-interface Health {
-  status: string;
-  db: string;
-  uptime: number;
-}
-
-/** Placeholder Fase 1. Login + order aktif menyusul di Fase 4. */
 export default function App() {
-  const { data, error } = useQuery<Health>({
-    queryKey: ['health'],
-    queryFn: async () => {
-      const r = await fetch('/api/health');
-      if (!r.ok) throw new Error('gagal');
-      return r.json() as Promise<Health>;
-    },
-  });
-
   return (
-    <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-2xl font-semibold">Kasir / POS</h1>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">Fase 1 — fondasi</p>
-      <p className="mt-6 text-sm">
-        Backend:{' '}
-        {error ? (
-          <span className="text-red-700">tidak terjangkau</span>
-        ) : (
-          <span>
-            {data?.status ?? '…'} · db {data?.db ?? '…'}
-          </span>
-        )}
-      </p>
-    </main>
+    <Routes>
+      <Route path="/login" element={<HalamanLogin />} />
+
+      <Route element={<Layout />}>
+        <Route
+          index
+          element={
+            <ButuhLogin roles={['kasir', 'admin']}>
+              <HalamanOrderAktif />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="manual"
+          element={
+            <ButuhLogin roles={['kasir', 'admin']}>
+              <HalamanKasirManual />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="menu"
+          element={
+            <ButuhLogin roles={['admin']}>
+              <HalamanMenu />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="meja"
+          element={
+            <ButuhLogin roles={['admin']}>
+              <HalamanMeja />
+            </ButuhLogin>
+          }
+        />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

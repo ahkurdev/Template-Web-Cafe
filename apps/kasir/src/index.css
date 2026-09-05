@@ -15,23 +15,67 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+/* Target sentuh: kasir dipakai di tablet, bukan cuma mouse. */
+button,
+select,
+a[role='button'] {
+  min-height: 44px;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-/* Struk: sembunyikan seluruh UI kecuali area struk. Detail 58/80mm di Fase 4. */
+/*
+ * Cetak. `visibility: hidden` (bukan `display: none`) di seluruh body:
+ * dengan display:none, `.cetak` yang berada di dalam <dialog> ikut hilang.
+ * Lebar 80mm default; ganti ke .cetak--58 untuk printer 58mm, dan
+ * .cetak--lembar untuk grid QR yang perlu selebar halaman.
+ */
 @media print {
   body * {
     visibility: hidden;
   }
-  #struk,
-  #struk * {
+
+  .cetak,
+  .cetak * {
     visibility: visible;
   }
-  #struk {
+
+  .cetak {
     position: absolute;
-    inset: 0;
+    inset: 0 auto auto 0;
     width: 80mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  .cetak--58 {
+    width: 58mm;
+  }
+
+  .cetak--lembar {
+    width: 100%;
+  }
+
+  /* Dialog native menggambar backdrop yang jadi halaman kosong tambahan. */
+  dialog {
+    position: static;
+    display: block;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    padding: 0;
+  }
+
+  dialog::backdrop {
+    display: none;
+  }
+
+  @page {
+    margin: 4mm;
   }
 }
