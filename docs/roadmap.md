@@ -21,8 +21,11 @@ Pembaca: Claude Code (saya sendiri) di sesi berikutnya. Kerjakan berurutan. Jang
 - **Fase 1** selesai — monorepo, `packages/shared`, Prisma schema + migrasi + seed, 3 app Vite, `/api/health` → `{"status":"ok","db":"ok"}`.
 - **Fase 2** selesai — 7 module backend, Socket.io, alur penuh terverifikasi lewat HTTP + socket. `pnpm typecheck`/`test`/`build` lulus (26 test).
 - **Fase 3** selesai — customer-menu: resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip.
-- **Fase 4** sebagian — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar. Bundle 123KB gzip, 33 test lulus. **Belum**: laporan, manajemen user, pengaturan (jadi Fase 6).
-- **Berikutnya**: Fase 5 (kitchen display).
+- **Fase 4** sebagian — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar. Bundle 123KB gzip. **Belum**: laporan, manajemen user, pengaturan (jadi Fase 6).
+- **Fase 5** selesai — KDS: login, 3 kolom, kartu besar + catatan berlatar, timer + warna menua, bunyi, aksi satu tap optimistic, indikator koneksi, wakeLock. Bundle 114KB gzip.
+- **Berikutnya**: Fase 6 (admin & laporan) — termasuk sisa Fase 4 (manajemen user, pengaturan).
+
+Total 40 test lulus (14 api + 12 shared + 7 kasir + 7 kds).
 
 Catatan implementasi yang menyimpang/melengkapi dokumen:
 - `order.pricing.ts` dipisah dari `order.service.ts` supaya logika harga bisa diuji tanpa DB.
@@ -38,6 +41,10 @@ Catatan implementasi yang menyimpang/melengkapi dokumen:
 - QR di kasir diambil lewat `fetch` → object URL, karena `<img src>` tidak bisa mengirim header `Authorization`.
 - `api.ts` kasir memaksa ke `/kasir/login` saat 401 **hanya** kalau token ada — tanpa cek itu, login yang gagal (401 tanpa token) ikut memicu reload dan pesan error tidak pernah terlihat.
 - Halaman kasir manual menghitung total dengan `hitungTotal` dari `@cafe/shared` (helper yang sama dengan server) supaya tombol "Buat & Lunas" tidak bisa ditekan dengan uang kurang. Server tetap sumber kebenaran.
+- KDS `lib/api.ts` disalin-tipis dari kasir, bukan diangkat ke paket bersama: KDS hanya butuh `get`+`patch` (tanpa upload/blob), jadi ~50 baris lebih murah daripada paket baru. Ditandai `ponytail:` — pindahkan ke `packages/client` kalau ada app keempat yang butuh fetch ber-auth.
+- KDS menghitung umur kartu dari `createdAt`, bukan dari `elapsedSeconds` milik server — nilai server hanya benar pada saat fetch, jadi timer akan macet antar-refetch.
+- Kolom "Siap" di KDS ditahan 5 menit di sisi klien karena `/kitchen/queue` hanya mengembalikan status aktif dapur. Tanpa penahan, kartu lenyap begitu ditap dan barista tidak tahu tapnya tercatat.
+- `useDetik` (KDS) memakai `setInterval` 1 detik. Ini **bukan** polling data — tidak ada request; hanya tick jam lokal supaya timer di kartu bergerak. Data tetap datang lewat socket.
 
 ## Fase 0 — Prasyarat lokal (sekali, sebelum Fase 1)
 
@@ -160,16 +167,20 @@ Wajib di app ini: target sentuh ≥ 44px, kontras ≥ 4.5:1, skeleton saat load,
 
 **Tujuan**: layar dapur yang berguna dari jarak 1,5 meter, tanpa disentuh selama jam sibuk.
 
-1. Login (role `dapur` cukup), auto-join room `kitchen`.
-2. Tiga kolom: **Baru** · **Diproses** · **Siap**. `GET /kitchen/queue` untuk initial, socket untuk update.
-3. Kartu order besar: `order_code` + nomor meja paling menonjol, item + qty + catatan (catatan diberi highlight — ini yang paling sering terlewat), timer sejak masuk.
-4. Warna kartu menua: < 5 menit netral, 5–10 menit kuning, > 10 menit merah. Ambang dari konstanta, mudah diubah.
-5. `order:new` → kartu masuk + bunyi + animasi singkat. Bunyi butuh interaksi pertama (kebijakan autoplay browser) → tampilkan tombol "Aktifkan suara" sekali.
-6. Aksi satu tap: Terima → Proses → Siap. Tombol besar, tanpa dialog konfirmasi (kecepatan lebih penting; salah tap bisa dikembalikan kasir).
-7. Indikator koneksi jelas dan besar. Saat socket mati, staf harus langsung tahu layar ini tidak bisa dipercaya.
-8. Cegah layar tidur (`navigator.wakeLock`, fallback abaikan), font besar, mode gelap default.
+1. ✅ Login (role `dapur`/`kasir`/`admin`), token di handshake → server auto-join room `kitchen`.
+2. ✅ Tiga kolom: **Baru** · **Diproses** (`dikonfirmasi` + `diproses`) · **Siap**. `GET /kitchen/queue` untuk initial, socket untuk update.
+3. ✅ Kartu besar: nomor meja `text-2xl` paling menonjol, `orderCode`, item + qty + catatan (catatan berlatar amber, bukan italic tipis), timer sejak masuk.
+4. ✅ Warna kartu menua: netral → amber → merah, ambang dari `KDS_AMBANG_KUNING`/`KDS_AMBANG_MERAH` di `@cafe/shared`.
+5. ✅ `order:new` → kartu masuk + bunyi tiga nada. Tombol "Aktifkan suara" sekali (kebijakan autoplay).
+6. ✅ Aksi satu tap: Terima → Mulai Proses → Siap. Optimistic update, tanpa dialog konfirmasi.
+7. ✅ Indikator koneksi besar: hijau "● Tersambung" / merah "○ TERPUTUS — data tidak terbaru".
+8. ✅ `navigator.wakeLock` (gagal diabaikan, minta ulang saat tab terlihat), font 18px, mode gelap default.
 
 **DoD**: order baru dari HP muncul di KDS < 1 detik dengan bunyi. Matikan WiFi 30 detik, hidupkan lagi → antrian tersusul lengkap lewat refetch (tidak ada order hilang). Timer & warna berubah sesuai umur order.
+
+**Terverifikasi** (backend + dua klien socket nyata): order baru → klien dapur terima `order:new`, ada di `/kitchen/queue` dengan `elapsedSeconds` · transisi `dikonfirmasi` → `diproses` → `selesai` semua sukses, tiap langkah memancarkan `order:updated` ke dapur dan `order:status` ke pelanggan · order `selesai` keluar dari antrian · `status: dibatalkan` lewat rute dapur → 400 (dapur tidak boleh membatalkan). **Susulan offline diuji langsung**: socket dimatikan, order dibuat (0 event diterima, sesuai harapan), socket dihidupkan → `connect` memicu refetch dan order tersusul di antrian. **Belum diverifikasi**: tampilan di layar fisik dapur dan `wakeLock` di perangkat nyata.
+
+Kolom "Siap" menahan kartu 5 menit di sisi klien — `GET /kitchen/queue` hanya mengembalikan status aktif dapur, jadi order selesai langsung hilang dari server. Tanpa penahan itu kartu lenyap begitu ditap dan barista tidak tahu tapnya tercatat.
 
 ## Fase 6 — Admin & Laporan
 

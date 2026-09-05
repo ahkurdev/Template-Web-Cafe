@@ -18,10 +18,10 @@ Repo ini masih dibangun bertahap. Yang sudah jalan dan terverifikasi:
 - ✅ **Backend core** — 7 module (auth, menu, order, kitchen, table, report, settings), Socket.io, 26 test lulus
 - ✅ **Customer Menu** — resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip
 - ✅ **Kasir** — login + guard role, order aktif realtime + bunyi, detail + timeline, pembayaran & kembalian, kasir manual, struk 58/80mm, CRUD menu + foto + toggle habis, CRUD meja + cetak QR. Bundle 123KB gzip
-- 🚧 **Kitchen Display** — belum diimplementasi (scaffold saja)
+- ✅ **Kitchen Display** — 3 kolom, kartu besar + catatan berlatar, timer & warna menua, bunyi order baru, aksi satu tap, indikator koneksi, wake lock. Bundle 114KB gzip
 - 🚧 **Laporan, manajemen user, pengaturan (UI)** — API sudah ada, halaman belum
 
-33 test lulus (14 api + 12 shared + 7 kasir). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
+40 test lulus (14 api + 12 shared + 7 kasir + 7 kds). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
 
 Urutan kerja & *definition of done* per fase: [docs/roadmap.md](./docs/roadmap.md).
 

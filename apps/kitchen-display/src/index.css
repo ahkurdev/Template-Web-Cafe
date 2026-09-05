@@ -17,7 +17,21 @@ body {
   font-size: 18px;
 }
 
+/* Target sentuh besar: ditekan tangan basah/bersarung, sambil berjalan. */
+button {
+  min-height: 48px;
+}
+
 :focus-visible {
   outline: 3px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
