@@ -1,12 +1,12 @@
 # Database — Sistem Cafe
 
-**Engine**: MariaDB 11 (InnoDB) — database `webcafe`, `utf8mb4` / `utf8mb4_unicode_ci`
-**ORM**: Prisma 6, provider `mysql`
-**Dev**: `mysql://root:root@localhost:3306/webcafe?connection_limit=5`
-**Prod**: user non-root, lihat [arsitektur.md](./arsitektur.md#deployment-tanpa-docker)
+**Engine**: SQLite (WAL) default — file `data/data.db`
+**ORM**: Drizzle ORM
+**Dev**: `file:./data/data.db`
+**Prod**: PostgreSQL opsional `postgres://...` — lihat [arsitektur.md](./arsitektur.md#deployment-tanpa-docker)
 **Update**: 2026-09-04
 
-Sumber tunggal skema: `apps/api/prisma/schema.prisma`. Dokumen ini penjelasannya, bukan duplikatnya — kalau beda, `schema.prisma` yang benar dan dokumen ini harus diperbarui.
+Sumber tunggal skema: `apps/api/src/db/schema.ts` (Drizzle). Dokumen ini penjelasannya — kalau beda, `schema.ts` yang benar.
 
 ## Konvensi
 
@@ -15,8 +15,8 @@ Sumber tunggal skema: `apps/api/prisma/schema.prisma`. Dokumen ini penjelasannya
 | Primary key | `String @db.VarChar(21)`, nanoid dibuat aplikasi | ID tidak bisa ditebak (dipakai di URL publik `/status/:code`), aman untuk merge multi-outlet nanti |
 | Uang | `Int` — rupiah penuh (`Rp 15.000` → `15000`) | tanpa float, tanpa `Decimal`, tanpa galat pembulatan |
 | Waktu | `DateTime @db.DateTime(3)`, selalu UTC | presisi milidetik untuk urutan antrian dapur |
-| Enum | Prisma `enum` → kolom `ENUM` MariaDB | divalidasi DB, bukan cuma aplikasi |
-| Nama model | Prisma PascalCase, tabel `snake_case` via `@@map` | idiomatis di dua sisi |
+| Enum | `text` + `CHECK` via Drizzle | divalidasi DB via CHECK constraint |
+| Nama model | Drizzle `tableName` snake_case | idiomatis |
 | Teks terindeks | maksimum `VarChar(191)` | aman untuk index utf8mb4 di semua konfigurasi InnoDB |
 | Hapus master data | soft delete `isActive` | order lama tetap bisa dibaca |
 | Audit | `createdAt` + `updatedAt` di semua tabel | — |
@@ -221,14 +221,14 @@ Tanpa ini, tiga halaman paling sering dibuka melakukan full scan.
 | `idx_order_payment_status` | `orders (paymentStatus, createdAt)` | daftar "belum bayar" di kasir |
 | `idx_order_table` | `orders (tableId, createdAt)` | riwayat per meja |
 | `uq_order_code` | `orders (orderCode)` UNIQUE | lookup `/status/:code` dari HP pelanggan |
-| `idx_item_order` | `order_items (orderId)` | ambil isi order (dibuat Prisma otomatis dari FK) |
+| `idx_item_order` | `order_items (orderId)` | ambil isi order |
 | `idx_item_menu` | `order_items (menuItemId)` | agregasi menu terlaris |
 | `idx_menu_cat_active` | `menu_items (categoryId, isActive, sortOrder)` | render menu pelanggan |
 | `uq_table_qr` | `cafe_tables (qrToken)` UNIQUE | resolve QR → meja |
 | `uq_user_username` | `users (username)` UNIQUE | login |
 | `idx_event_order` | `order_events (orderId, createdAt)` | timeline order |
 
-MariaDB membuat index otomatis untuk setiap FK, jadi jangan menduplikasi index kolom FK tunggal — hanya tambahkan yang komposit.
+Buat index FK penting secara eksplisit — jangan andalkan auto-index.
 
 ## Aturan integritas
 
@@ -244,7 +244,7 @@ Ditegakkan di DB, bukan hanya di kode aplikasi:
 | Hapus menu/meja → order tetap ada | FK `onDelete: SetNull` |
 | Hapus user/kategori terpakai → ditolak | FK `onDelete: Restrict` |
 
-Prisma tidak punya `@check` di schema. Constraint `CHECK` ditulis manual di file migrasi hasil generate — cara ini didukung resmi dan tetap ikut terversi:
+Drizzle `check()` ditulis di `schema.ts` dan ikut tergenerate ke SQL:
 
 ```sql
 -- tambahkan di akhir migration.sql yang relevan
@@ -292,19 +292,19 @@ pnpm db:seed               # data awal
 3. 3 kategori contoh, ~8 menu contoh (harga integer)
 4. 5 meja + `qrToken` acak
 
-## Catatan kompatibilitas MariaDB ↔ PostgreSQL
+## Catatan kompatibilitas SQLite ↔ PostgreSQL
 
-Rencana saat ini MariaDB. Kalau nanti pindah ke PostgreSQL (mis. butuh > 1 instance backend), ganti `provider` dan `DATABASE_URL`, buat ulang folder migrasi, lalu migrasikan data. Yang perlu diperhatikan — sudah dihindari sejak sekarang:
+Default SQLite. Kalau pindah ke PostgreSQL, cukup ganti `DATABASE_URL` ke `postgres://` dan driver ke `pg`. Schema Drizzle yang sama dipakai keduanya. Yang diperhatikan:
 
-| Hal | MariaDB | PostgreSQL | Sikap kita |
+| Hal | SQLite | PostgreSQL | Sikap kita |
 |---|---|---|---|
 | Auto-increment | `AUTO_INCREMENT` | `SERIAL`/`IDENTITY` | dihindari — PK nanoid dari aplikasi |
-| Enum | kolom `ENUM` | `CREATE TYPE` | Prisma `enum` menangani keduanya |
-| Boolean | `TINYINT(1)` | `boolean` | pakai tipe Prisma `Boolean`, jangan pernah `TINYINT` mentah |
+| Enum | `TEXT` + CHECK | `TEXT` + CHECK | Drizzle `check()` |
+| Boolean | `integer` 0/1 | `boolean` | Drizzle `integer({mode:'boolean'})` / `boolean` |
 | Case-sensitivity | nama tabel ikut OS | selalu case-sensitive | semua nama tabel lowercase |
-| `LIKE` | case-insensitive | case-sensitive | pencarian pakai `mode: 'insensitive'` Prisma, jangan `LIKE` mentah |
+| `LIKE` | `LIKE` case-insensitive via `lower()` | `ILIKE` | pakai `lower()` portable atau Drizzle helper |
 | Timestamp | `DATETIME(3)` | `timestamptz` | aplikasi selalu pegang `Date` UTC |
 | String terindeks | batas byte index | lebih longgar | `VarChar(191)` untuk kolom terindeks |
 | Upsert | `ON DUPLICATE KEY` | `ON CONFLICT` | pakai `prisma.upsert()` |
 
-Aturan operasionalnya satu: **jangan pakai `$queryRawUnsafe` / SQL mentah spesifik dialek** di kode aplikasi. Semua akses lewat Prisma Client. Kalau suatu query benar-benar butuh SQL mentah (mis. agregasi laporan berat), tulis di `report.repository.ts` dan beri komentar penanda dialek supaya mudah ditemukan saat migrasi.
+Aturan operasionalnya satu: **jangan pakai SQL mentah spesifik dialek** di kode aplikasi. Semua akses lewat Drizzle query builder. Kalau butuh SQL mentah (agregasi laporan berat), tulis di `report.repository.ts` dan beri penanda dialek.

@@ -17,8 +17,8 @@ Pembaca: agent yang melanjutkan repo ini (sesi berikutnya). Kerjakan berurutan. 
 
 ## Status
 
-- **Fase 0** selesai — MariaDB `webcafe` hidup, `.env` terisi.
-- **Fase 1** selesai — monorepo, `packages/shared`, Prisma schema + migrasi + seed, 3 app Vite, `/api/health` → `{"status":"ok","db":"ok"}`.
+- **Fase 0** selesai — SQLite `data.db` (WAL) siap, `.env` terisi.
+- **Fase 1** selesai — monorepo, `packages/shared`, Drizzle schema + migrasi + seed, 3 app Vite, `/api/health` → `{"status":"ok","db":"ok"}`.
 - **Fase 2** selesai — 7 module backend, Socket.io, alur penuh terverifikasi lewat HTTP + socket. `pnpm typecheck`/`test`/`build` lulus (26 test).
 - **Fase 3** selesai — customer-menu: resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip.
 - **Fase 4** selesai — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar.
@@ -55,21 +55,16 @@ Catatan implementasi yang menyimpang/melengkapi dokumen:
 
 ## Fase 0 — Prasyarat lokal (sekali, sebelum Fase 1)
 
-MariaDB harus hidup dulu. Cek:
+SQLite tidak butuh server — cukup file:
 
 ```bash
-mysql -u root -proot -e "SELECT VERSION();"
-```
-
-Gagal? Pasang MariaDB/XAMPP dulu, lalu:
-
-```sql
-CREATE DATABASE webcafe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+mkdir -p data && touch data/data.db
+# WAL diaktifkan via Drizzle client: PRAGMA journal_mode=WAL
 ```
 
 `.env` dev:
 ```
-DATABASE_URL="mysql://root:root@localhost:3306/webcafe?connection_limit=5"
+DATABASE_URL="file:./data/data.db"
 JWT_SECRET="<openssl rand -hex 32>"
 PORT=3000
 UPLOAD_DIR="./uploads"
@@ -203,7 +198,7 @@ Kolom "Siap" menahan kartu 5 menit di sisi klien — `GET /kitchen/queue` hanya 
 
 **DoD**: buka laporan bulan berjalan → angka cocok dengan penjumlahan manual data seed → export CSV terbuka benar di Excel (karakter Indonesia utuh, angka bisa di-SUM).
 
-**Terverifikasi** (HTTP nyata terhadap MariaDB lokal): `summary` → omzet 104.000 dari 2 order, rata-rata 52.000, `perMetode` cash 50.000 + qris 54.000 — **cocok dengan penjumlahan manual** · `revenue` konsisten antara `groupBy=day` dan `month` · `top-items` terurut qty desc · tiga CSV terunduh dengan BOM UTF-8 (`ef bb bf`), CRLF, dan angka rupiah polos · rentang > 1 tahun → 400, `dateTo < dateFrom` → 400 · role kasir: `summary` 200, `export` 403, `/auth/users` 403 · admin aktif terakhir tidak bisa diturunkan/dinonaktifkan → 403 · `PATCH /settings` pajak 11% + servis 5% → order baru subtotal 15.000 menghasilkan pajak 1.650, servis 750, total 17.400. **Belum diverifikasi**: CSV dibuka di Excel sungguhan.
+**Terverifikasi** (HTTP nyata terhadap SQLite lokal): `summary` → omzet 104.000 dari 2 order, rata-rata 52.000, `perMetode` cash 50.000 + qris 54.000 — **cocok dengan penjumlahan manual** · `revenue` konsisten antara `groupBy=day` dan `month` · `top-items` terurut qty desc · tiga CSV terunduh dengan BOM UTF-8 (`ef bb bf`), CRLF, dan angka rupiah polos · rentang > 1 tahun → 400, `dateTo < dateFrom` → 400 · role kasir: `summary` 200, `export` 403, `/auth/users` 403 · admin aktif terakhir tidak bisa diturunkan/dinonaktifkan → 403 · `PATCH /settings` pajak 11% + servis 5% → order baru subtotal 15.000 menghasilkan pajak 1.650, servis 750, total 17.400. **Belum diverifikasi**: CSV dibuka di Excel sungguhan.
 
 Nama/alamat/telepon cafe belum bisa diubah dari UI — masih di tabel `outlets`, diisi saat seed. Butuh endpoint `PATCH /outlet` dulu.
 
@@ -251,7 +246,7 @@ Kalau harus berhenti di tengah, ini urutan yang tetap menghasilkan sistem bergun
 | **P4** | Fase 8 | Pembeda, bukan kebutuhan |
 
 Kalau harus memilih di dalam satu fase:
-- **Fase 4**: order aktif + pembayaran + toggle habis dulu. Cetak struk dan manajemen menu bisa sementara lewat Prisma Studio.
+- **Fase 4**: order aktif + pembayaran + toggle habis dulu. Cetak struk dan manajemen menu bisa sementara lewat drizzle-studio.
 - **Fase 6**: `GET /reports/summary` + export CSV dulu. Grafik paling akhir — CSV sudah cukup untuk tutup buku.
 - **Fase 7**: README + `.env.example` + backup script tidak boleh dilewat. Tanpa itu proyek ini tidak bisa dipakai siapa pun selain saya sendiri.
 

@@ -10,7 +10,7 @@ Terkait: [prd.md](./prd.md) · [database.md](./database.md) · [api.md](./api.md
 3. **DB penjaga kebenaran.** FK, unique, CHECK hidup di level DB, bukan cuma di kode.
 4. **Real-time push, bukan polling.** Setiap perubahan state → emit event Socket.io ke room terkait.
 5. **Uang = integer.** Rupiah penuh, tanpa float, tanpa desimal, di mana pun.
-6. **Migrasi terversi.** Tiap perubahan schema jadi file migrasi SQL yang di-commit. Prisma Migrate yang membuat, bukan tulis tangan.
+6. **Migrasi terversi.** Tiap perubahan schema jadi file migrasi SQL yang di-commit. drizzle-kit yang generate, bukan tulis tangan.
 7. **Tanpa Docker.** Artefak deploy = source + `node_modules` + file statis, dijalankan PM2, di-proxy Caddy.
 8. **Ringan lebih penting dari lengkap.** Dependensi baru harus dibenarkan; kalau bisa < 50 baris, tulis sendiri.
 
@@ -35,7 +35,7 @@ Dapur ───────▶│              ├─▶ proxy   /api/*        �
               │                            │           · menu                 │          │
               │                            └────────────────┬──────────────────┘          │
               │                                             ▼                             │
-              │                     Prisma Client ──▶ MariaDB 11 :3306 (systemd)          │
+              │                     Drizzle ORM ──▶ SQLite data.db (WAL) / PostgreSQL          │
               │                                       db `webcafe` · utf8mb4              │
               └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -46,17 +46,17 @@ Dapur ───────▶│              ├─▶ proxy   /api/*        �
 
 | Komponen | Pilihan | Alasan | Alternatif ditolak |
 |---|---|---|---|
-| Runtime | Node.js 22 LTS | dependensi native (`sharp`) matang; PM2 first-class; Prisma engine resmi didukung | Bun (Prisma masih bermasalah), Deno |
-| HTTP | Fastify 5 | ~2× throughput Express, skema-first, plugin resmi (jwt, cors, static, rate-limit, multipart) | Express (lebih lambat, ekosistem middleware longgar), NestJS (RAM & boilerplate besar) |
-| Realtime | Socket.io 4 | punya room bawaan, auto-reconnect, fallback long-polling untuk HP/proxy jelek | `ws` mentah (harus tulis room + reconnect sendiri), SSE (satu arah), polling (dilarang PRD) |
-| ORM | Prisma 6 | `prisma migrate` menghasilkan migrasi otomatis dari perubahan schema + `prisma studio` untuk inspeksi manual — alasan utama dipilih user | Drizzle (migrasi lebih manual), TypeORM |
-| Database | MariaDB 11 | permintaan user; sudah familiar, tooling melimpah (phpMyAdmin/DBeaver), replikasi & backup matang | SQLite (ditolak user), PostgreSQL |
-| Driver | `mysql2` via Prisma | driver resmi provider `mysql` Prisma untuk MariaDB | — |
-| Validasi | Zod 3 | satu sumber tipe + validasi runtime, tipe di-infer ke frontend | `ajv` skema JSON (verbose), `yup` |
-| Auth | `@fastify/jwt` + `argon2` | stateless, tanpa Redis; argon2id standar sekarang | session store (butuh state), bcrypt (lebih lemah) |
-| Upload | `@fastify/multipart` + `sharp` | resize di server, hemat kuota pelanggan | simpan mentah (foto 5MB dari HP → menu berat) |
-| Log | `pino` (bawaan Fastify) | JSON, cepat, tanpa dependensi tambahan | winston |
-| Test | `vitest` | sama dengan frontend, satu config | jest (lambat untuk TS/ESM) |
+| Runtime | Node.js 22 LTS | dependensi native (`sharp`) matang; PM2 first-class | Bun, Deno |
+| HTTP | Fastify 5 | ~2× throughput Express, skema-first, plugin resmi (jwt, cors, static, rate-limit, multipart) | Express (lebih lambat), NestJS (RAM besar) |
+| Realtime | Socket.io 4 | punya room bawaan, auto-reconnect, fallback long-polling untuk HP/proxy jelek | `ws` mentah, SSE (satu arah), polling (dilarang) |
+| ORM | Drizzle ORM | SQL-like tipis, migrasi drizzle-kit, tanpa engine berat — ideal 1GB RAM | Prisma (engine Rust berat), TypeORM |
+| Database | SQLite (default) → PostgreSQL (opsional) | file lokal tanpa proses, WAL mode cepat; schema portable via Drizzle | MariaDB (butuh proses + tuning) |
+| Driver | `better-sqlite3` (dev) / `pg` (prod) via Drizzle | driver ringan, sync untuk SQLite | `mysql2` |
+| Validasi | Zod 3 | satu sumber tipe + validasi runtime, tipe di-infer ke frontend | `ajv`, `yup` |
+| Auth | `@fastify/jwt` + `argon2` | stateless, tanpa Redis; argon2id standar sekarang | session store, bcrypt |
+| Upload | `@fastify/multipart` + `sharp` | resize di server, hemat kuota pelanggan | simpan mentah (5MB) |
+| Log | `pino` (bawaan Fastify) | JSON, cepat | winston |
+| Test | `vitest` | sama dengan frontend, satu config | jest |
 
 ### Frontend (tiga app, stack identik)
 
@@ -75,26 +75,20 @@ Bukan Next.js: tiga app ini SPA di balik login (kecuali menu publik). SSR tidak 
 
 ### Database
 
-MariaDB 11, database `webcafe`, charset `utf8mb4` / `utf8mb4_unicode_ci` (emoji di catatan pesanan tidak merusak query).
-Dev lokal: `mysql://root:root@localhost:3306/webcafe`. Produksi: user khusus, **bukan root** (lihat bagian deployment).
+SQLite default (`data.db`, `journal_mode=WAL`, `foreign_keys=ON`), tanpa proses terpisah — ideal untuk VPS 1GB.
+Migrasi via `drizzle-kit generate` + `drizzle-kit migrate` → file SQL di `apps/api/drizzle/` yang di-commit.
+Untuk produksi yang butuh scale, ganti ke PostgreSQL cukup ubah `DATABASE_URL` (postgres://) + driver `pg` — schema yang sama, tanpa rewrite (tipe integer/text/boolean portable). Detail tabel di [database.md](./database.md).
 
-Prisma dipilih untuk kenyamanan migrasi: `prisma migrate dev` membaca diff `schema.prisma` → menulis file SQL migrasi → menerapkannya, dan `prisma studio` memberi GUI inspeksi tanpa tool eksternal. Detail tabel di [database.md](./database.md).
-
-**Biaya yang diterima di VPS 1GB.** Stack ini lebih berat dari rencana awal:
+**Estimasi RSS di VPS 1GB (SQLite):**
 
 | Proses | Perkiraan RSS |
 |---|---|
-| MariaDB (dituning kecil) | 180–250MB |
-| Node + Fastify + Prisma Client | 130–180MB |
+| SQLite (file, tanpa daemon) | ~5MB (di dalam proses Node) |
+| Node + Fastify + Drizzle | 90–140MB |
 | Caddy | ~20MB |
-| Sisa untuk OS + burst | ~400MB |
+| Sisa untuk OS + burst | ~800MB |
 
-Masih muat, tapi tidak lega. Tiga syarat supaya aman, ditegakkan sejak Fase 1:
-1. **Swap 2GB wajib** — tanpa ini MariaDB gampang kena OOM-kill saat backup atau query laporan berat.
-2. **Tuning `my.cnf`** (`innodb_buffer_pool_size=128M`, `max_connections=30`, `performance_schema=OFF`) — default MariaDB mengasumsikan mesin besar.
-3. **`connection_limit=5`** di `DATABASE_URL` — pool Prisma default (`vCPU×2+1`) berlebihan untuk satu outlet dan menahan RAM.
-
-Kalau nanti terasa sesak, urutannya: aktifkan preview `queryCompiler` Prisma (menghapus Rust query engine, Client jadi TypeScript murni) → naikkan VPS ke 2GB. Jangan ganti MariaDB, migrasi balik lebih mahal daripada tambahan RAM.
+Jauh lebih lega dari MariaDB. Tanpa tuning `my.cnf`, cukup `PRAGMA journal_mode=WAL`.
 
 ## Struktur folder monorepo
 
@@ -127,7 +121,7 @@ web-cafe/
 │  │  │  ├─ app.ts            # register plugin & module (bisa di-test)
 │  │  │  ├─ env.ts            # baca + validasi env pakai Zod, fail-fast
 │  │  │  ├─ db/
-│  │  │  │  ├─ client.ts      # singleton PrismaClient (hindari koneksi ganda saat HMR)
+│  │  │  │  ├─ client.ts      # singleton Drizzle client (better-sqlite3 / pg)
 │  │  │  │  └─ seed.ts        # admin + kategori & menu contoh
 │  │  │  ├─ plugins/
 │  │  │  │  ├─ auth.ts        # JWT + guard requireRole()
@@ -142,9 +136,9 @@ web-cafe/
 │  │  │  │  ├─ table/         # meja + QR token
 │  │  │  │  └─ report/        # omzet, terlaris, export CSV
 │  │  │  └─ lib/              # nanoid, orderCode, csv, image
-│  │  └─ prisma/
-│  │     ├─ schema.prisma     # sumber tunggal skema DB
-│  │     └─ migrations/       # SQL hasil `prisma migrate dev` — di-commit
+│  │  └─ drizzle/
+│  │     ├─ schema.ts         # sumber tunggal skema DB (Drizzle)
+│  │     └─ migrations/       # SQL hasil `drizzle-kit generate` — di-commit
 │  │
 │  ├─ customer-menu/          # publik  → /        (SPA, tanpa login)
 │  ├─ kasir/                  # staff   → /kasir   (login)
@@ -162,7 +156,7 @@ Tiap module punya tiga lapisan dengan tanggung jawab jelas:
 modules/order/
   order.routes.ts       # HTTP: parse + validasi Zod → panggil service → bentuk response
   order.service.ts      # aturan bisnis, transaksi, hitung total, emit event
-  order.repository.ts   # hanya query Prisma. Tanpa aturan bisnis, tanpa emit
+  order.repository.ts   # hanya query Drizzle. Tanpa aturan bisnis, tanpa emit
   order.schema.ts       # Zod khusus module (re-export dari @cafe/shared)
 ```
 
@@ -237,60 +231,47 @@ Daftar event lengkap beserta payload: [api.md](./api.md).
 
 ## Deployment tanpa Docker
 
-Satu proses Node (backend) + MariaDB dari systemd + tiga folder statis. Caddy jadi TLS + router. Tidak ada container di titik mana pun.
+Satu proses Node (backend) + SQLite file + tiga folder statis. Caddy jadi TLS + router. Tidak ada container di titik mana pun.
 
 ### Prasyarat VPS (Ubuntu 24.04, 1 vCPU / 1GB)
 
 ```bash
-# Swap 2GB — kerjakan PERTAMA. MariaDB di 1GB tanpa swap rawan OOM-kill.
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
 # Node 22 LTS
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs build-essential python3   # build-essential untuk sharp
 sudo npm i -g pnpm pm2
-
-# MariaDB 11
-sudo apt install -y mariadb-server
-sudo mariadb-secure-installation                     # set password root, buang anonymous user
 
 sudo apt install -y caddy                            # atau nginx, lihat catatan bawah
 ```
 
 `build-essential` wajib: tanpa Docker, `sharp` dikompilasi di mesin ini.
 
-### Siapkan database
-
-```sql
-sudo mariadb <<'SQL'
-CREATE DATABASE webcafe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'webcafe'@'localhost' IDENTIFIED BY 'GANTI_PASSWORD_KUAT';
-GRANT ALL PRIVILEGES ON webcafe.* TO 'webcafe'@'localhost';
-FLUSH PRIVILEGES;
-SQL
-```
-
-**Jangan pakai `root:root` di produksi.** Kredensial itu untuk dev lokal saja; di VPS yang terjangkau internet, root tanpa password kuat berarti seluruh database bisa diambil siapa pun yang menemukan port 3306 terbuka. Pastikan juga `bind-address = 127.0.0.1` (default MariaDB) supaya DB tidak mendengarkan dari luar.
-
-### Tuning `/etc/mysql/mariadb.conf.d/60-webcafe.cnf`
-
-Default MariaDB mengasumsikan mesin besar. Tanpa ini, DB memakan RAM yang dibutuhkan Node:
-
-```ini
-[mysqld]
-innodb_buffer_pool_size = 128M
-max_connections         = 30
-performance_schema      = OFF
-innodb_flush_method     = O_DIRECT
-tmp_table_size          = 16M
-max_heap_table_size     = 16M
-```
+### Siapkan database (SQLite — tanpa setup server)
 
 ```bash
-sudo systemctl restart mariadb && sudo systemctl enable mariadb
+mkdir -p data && touch data/data.db
+# permissions
+chmod 600 data/data.db
 ```
+
+Untuk PostgreSQL (opsional, bila scale):
+```sql
+CREATE DATABASE webcafe;
+CREATE USER webcafe WITH PASSWORD 'GANTI_PASSWORD_KUAT';
+GRANT ALL PRIVILEGES ON DATABASE webcafe TO webcafe;
+```
+
+### Tuning SQLite
+
+Cukup aktifkan WAL di koneksi awal (sudah di `db/client.ts`):
+
+```sql
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+PRAGMA synchronous=NORMAL;
+```
+
+WAL membuat read tidak block write — penting saat kasir tulis order bersamaan KDS baca antrian.
 
 ### Build & jalan
 
@@ -298,13 +279,13 @@ sudo systemctl restart mariadb && sudo systemctl enable mariadb
 git clone <repo> /var/www/web-cafe && cd /var/www/web-cafe
 cp .env.example .env && nano .env      # JWT_SECRET, DATABASE_URL, PORT
 pnpm install --frozen-lockfile
-pnpm build                             # prisma generate + build packages/* lalu apps/*
-pnpm db:deploy                         # prisma migrate deploy — TANPA prompt, tanpa reset
+pnpm build                             # drizzle generate + build packages/* lalu apps/*
+pnpm db:migrate                         # drizzle-kit migrate — apply file SQL di drizzle/
 pnpm db:seed                           # sekali saja, buat user admin
 pm2 start ecosystem.config.cjs && pm2 save && pm2 startup
 ```
 
-Produksi memakai `prisma migrate deploy`, bukan `migrate dev`. `migrate dev` bisa menawarkan reset database saat mendeteksi drift — di produksi itu artinya kehilangan seluruh data order.
+Produksi memakai `drizzle-kit migrate` yang apply file SQL terversi — tanpa reset. Jangan hapus folder `drizzle/` yang sudah di-commit.
 
 `ecosystem.config.cjs` — hanya backend yang perlu proses:
 
@@ -323,7 +304,7 @@ module.exports = {
 };
 ```
 
-`instances: 1` karena Socket.io multi-instance butuh adapter Redis untuk broadcast lintas proses — tanpa itu, order baru hanya sampai ke klien yang kebetulan terhubung ke proses yang sama. MariaDB sendiri sanggup banyak koneksi, jadi kalau nanti perlu skala: pasang `@socket.io/redis-adapter` lalu naikkan `instances`.
+`instances: 1` karena Socket.io multi-instance butuh adapter Redis untuk broadcast lintas proses — tanpa itu, order baru hanya sampai ke klien yang kebetulan terhubung ke proses yang sama. SQLite single-file tidak untuk multi-proses write; kalau scale pakai PostgreSQL + `@socket.io/redis-adapter` lalu naikkan `instances`.
 
 ### Caddyfile
 
@@ -377,27 +358,30 @@ Frontend statis langsung aktif setelah `build` (tanpa restart). Backend `reload`
 ### Backup
 
 ```bash
-mariadb-dump --single-transaction --quick webcafe | gzip > /backup/webcafe-$(date +%F).sql.gz
+sqlite3 data/data.db ".backup /backup/webcafe-$(date +%F).db"
 tar czf /backup/uploads-$(date +%F).tar.gz uploads/
+# atau bila PostgreSQL:
+# pg_dump webcafe | gzip > /backup/webcafe-$(date +%F).sql.gz
 ```
 
-`--single-transaction` memberi snapshot konsisten tanpa mengunci tabel, jadi cafe tetap bisa menerima order saat backup jalan. `--quick` menahan pemakaian RAM di mesin 1GB. Pasang di cron harian, dan uji restore-nya sekali sebelum mengandalkannya:
+`sqlite3 .backup` membuat snapshot konsisten tanpa lock lama. Pasang di cron harian, dan uji restore-nya sekali sebelum mengandalkannya:
 
 ```bash
-gunzip < /backup/webcafe-YYYY-MM-DD.sql.gz | mariadb webcafe_test
+sqlite3 data_test.db ".restore /backup/webcafe-YYYY-MM-DD.db"
 ```
 
 ### Mode dev lokal
 
-MariaDB lokal, kredensial `root:root` sesuai permintaan:
+SQLite lokal (tanpa kredensial):
 
 ```
-DATABASE_URL="mysql://root:root@localhost:3306/webcafe?connection_limit=5"
+DATABASE_URL="file:./data/data.db"
 ```
 
 ```bash
-pnpm db:migrate     # prisma migrate dev — bikin migrasi baru dari perubahan schema
-pnpm db:studio      # GUI Prisma Studio :5555
+pnpm db:generate    # drizzle-kit generate — bikin file SQL dari perubahan schema
+pnpm db:migrate     # drizzle-kit migrate — apply migrasi
+pnpm db:studio      # drizzle-studio (opsional)
 pnpm dev            # api :3000 · customer :5173 · kasir :5174 · kds :5175
 ```
 
@@ -407,8 +391,8 @@ Vite proxy `/api` dan `/socket.io` ke `:3000`, jadi tidak ada urusan CORS di dev
 
 | Aspek | Cara ditegakkan |
 |---|---|
-| Uang | kolom `Int` di Prisma; helper `@cafe/shared/money`; dilarang `parseFloat` untuk harga |
-| Performa read | index sesuai [database.md](./database.md); MariaDB di `localhost` (tanpa network hop) |
+| Uang | kolom `integer` di Drizzle; helper `@cafe/shared/money`; dilarang `parseFloat` untuk harga |
+| Performa read | index sesuai [database.md](./database.md); SQLite file lokal (tanpa network hop) |
 | RAM | satu proses Node; `connection_limit=5`; `innodb_buffer_pool_size=128M`; swap 2GB; frontend statis |
 | Keamanan | Zod di semua boundary; `argon2id`; JWT 8 jam; rate limit rute publik; upload dibatasi mime + 5MB; DB user non-root + `bind-address=127.0.0.1` |
 | Realtime | Socket.io + refetch saat reconnect; `setInterval` polling dilarang |
@@ -421,6 +405,6 @@ Vite proxy `/api` dan `/socket.io` ke `:3000`, jadi tidak ada urusan CORS di dev
 - **Upload ke disk lokal** → pindah ke S3-compatible kalau multi-outlet.
 - **Laporan dihitung on-the-fly** → tambah tabel ringkasan harian kalau data > ~100k order.
 - **Tanpa `qris_manual` otomatis** → webhook payment gateway di Fase 2.
-- **Prisma + MariaDB di 1GB RAM** → margin tipis (lihat tabel RSS di atas). Jalan keluar berurutan: preview `queryCompiler` → VPS 2GB.
+- **SQLite di 1GB RAM** → sangat ringan. Jika migrasi ke PostgreSQL, pertimbangkan pool size `max: 5`.
 
-Keputusan yang sulit dibalik (MariaDB + Prisma, monolith modular, tanpa Docker) tercatat di sini; kalau nanti diubah, tulis ADR di `docs/adr/`.
+Keputusan yang sulit dibalik (SQLite/Drizzle, monolith modular, tanpa Docker) tercatat di sini; kalau nanti diubah, tulis ADR di `docs/adr/`.

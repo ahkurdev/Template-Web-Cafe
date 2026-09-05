@@ -96,12 +96,12 @@ Data milik pemilik cafe. Jalan di satu VPS 1GB RAM secara native (PM2 + Caddy), 
 
 | Aspek | Target |
 |---|---|
-| RAM | backend idle < 180MB; MariaDB dituning < 250MB; total nyaman di VPS 1GB + swap 2GB |
-| Latency API | p95 < 150ms untuk read (MariaDB di localhost, tanpa network hop) |
+| RAM | backend idle < 120MB; SQLite tanpa proses DB terpisah; total nyaman di VPS 1GB |
+| Latency API | p95 < 150ms untuk read (SQLite file lokal, tanpa network hop) |
 | Latency real-time | perubahan status tampil < 1s di klien yang terhubung |
 | Bundle frontend | `customer-menu` < 200KB gzip (dibuka di 4G, HP kentang) |
 | Ukuran DB | ~50 order/hari ≈ puluhan MB/tahun |
-| Backup | `mariadb-dump --single-transaction` + folder `uploads/`, via cron |
+| Backup | `sqlite3 data.db .dump` + folder `uploads/`, via cron (atau `pg_dump` bila pakai PostgreSQL) |
 | Deployment | native: PM2 + Caddy. Tanpa Docker, tanpa Kubernetes |
 | Uptime | restart otomatis via PM2; sistem tetap jalan saat internet mati (LAN) |
 | Aksesibilitas | kontras ≥ 4.5:1, target sentuh ≥ 44px, bisa dipakai keyboard |
@@ -113,15 +113,15 @@ Data milik pemilik cafe. Jalan di satu VPS 1GB RAM secara native (PM2 + Caddy), 
 **Wajib**
 - Tanpa Docker/container — dilarang di semua fase, termasuk dev.
 - Monorepo pnpm workspaces.
-- Backend: Node.js + Fastify + Socket.io + **Prisma ORM**.
-- DB: **MariaDB 11** (dev lokal `root:root`). Detail di [database.md](./database.md).
+- Backend: Node.js + Fastify + Socket.io + **Drizzle ORM**.
+- DB: **SQLite** default (file `data.db`, WAL mode) — schema harus portable ke **PostgreSQL**. Detail di [database.md](./database.md).
 - Frontend: React + Vite + TypeScript + Tailwind, tiga app terpisah di `apps/`.
 - Monolith modular, bukan microservices.
 - Harga = integer rupiah.
 - Sasaran VPS 1 vCPU / 1GB RAM.
 
 **Diterima sebagai konsekuensi**
-- MariaDB + Prisma di 1GB RAM = margin tipis. Butuh swap 2GB + tuning `my.cnf` + `connection_limit=5`. Rincian di [arsitektur.md](./arsitektur.md#database).
+- SQLite di 1GB RAM = sangat ringan (tanpa proses DB terpisah); untuk naik ke PostgreSQL cukup ganti `DATABASE_URL` + driver. Rincian di [arsitektur.md](./arsitektur.md#database).
 - Tanpa Docker = `sharp` dikompilasi di VPS, butuh `build-essential`.
 - Order pelanggan tanpa login → rawan spam. Diredam rate limit per IP + `qr_token` yang bisa dicabut.
 - `qris_manual` bukan rekonsiliasi otomatis; kasir yang memutuskan.

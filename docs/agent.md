@@ -4,7 +4,7 @@ Dibaca AI agent sebelum menyentuh repo ini. Dokumen perencanaan: [prd.md](./prd.
 
 ## Konteks
 
-Sistem operasional cafe open source, self-hosted, **tanpa Docker**. Satu backend Fastify + tiga frontend React (customer-menu publik, kasir, kitchen-display). MariaDB + Prisma. Target VPS 1 vCPU / 1GB RAM.
+Sistem operasional cafe open source, self-hosted, **tanpa Docker**. Satu backend Fastify + tiga frontend React (customer-menu publik, kasir, kitchen-display). SQLite + Drizzle. Target VPS 1 vCPU / 1GB RAM.
 
 ## Perintah
 
@@ -15,8 +15,8 @@ pnpm build            # WAJIB lulus sebelum lapor selesai
 pnpm test             # WAJIB lulus sebelum lapor selesai
 pnpm typecheck        # tsc --noEmit di semua paket
 
-pnpm db:migrate       # dev: prisma migrate dev
-pnpm db:deploy        # prod: prisma migrate deploy (tanpa prompt, tanpa reset)
+pnpm db:generate      # drizzle-kit generate
+pnpm db:migrate       # drizzle-kit migrate (apply SQL terversi)
 pnpm db:studio        # GUI :5555
 pnpm db:seed          # data awal (idempoten)
 ```
@@ -39,8 +39,8 @@ pnpm db:seed          # data awal (idempoten)
 ## Dilarang keras
 
 - `Dockerfile`, `docker-compose.yml`, `.dockerignore`, atau instruksi container apa pun.
-- `prisma migrate dev` di produksi (bisa reset DB → seluruh data order hilang). Pakai `migrate deploy`.
-- `prisma db push` selain coba-coba lokal (tidak menghasilkan file migrasi).
+- `drizzle-kit push` tanpa generate di produksi (tidak terversi). Pakai `drizzle-kit migrate` yang apply file SQL di drizzle/.
+- `drizzle-kit push` selain coba-coba lokal.
 - `instances > 1` di PM2 tanpa adapter Redis Socket.io.
 
 ## Sebelum bilang "selesai"
@@ -54,7 +54,7 @@ pnpm db:seed          # data awal (idempoten)
 
 - `base` Vite (`/kasir/`, `/kds/`) harus cocok dengan `basename` React Router dan `handle` Caddyfile. Kalau tidak, aset 404 di produksi.
 - `trustProxy: true` wajib di Fastify. Tanpa itu, di belakang Caddy semua request terlihat dari `127.0.0.1` dan satu pelanggan menghabiskan kuota rate limit semua orang.
-- Prisma Client singleton (`db/client.ts`). Tanpa itu `tsx watch` menghabiskan pool MariaDB (`connection_limit=5`).
-- Constraint `CHECK` tidak ada di `schema.prisma` — ditulis manual di file migrasi. Jangan hilang saat regenerate.
+- Drizzle client singleton (`db/client.ts`) dengan `better-sqlite3` WAL. Tanpa itu `tsx watch` bikin handle ganda.
+- Constraint `CHECK` ada di `schema.ts` via `check()` — jangan hilang saat regenerate.
 - Klien wajib `invalidateQueries()` saat socket `connect`. Tanpa itu, tablet dapur yang WiFi-nya drop kehilangan order.
-- MariaDB + Prisma di 1GB RAM butuh swap 2GB + tuning `my.cnf`. Bukan opsional.
+- SQLite + Drizzle di 1GB RAM butuh swap 2GB + tuning `my.cnf`. Bukan opsional.

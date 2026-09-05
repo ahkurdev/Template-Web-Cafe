@@ -2,7 +2,7 @@
 
 Dijalankan sebelum sistem menghadap internet, dan sekali lagi setelah tiap perubahan auth/upload/rute publik.
 
-**Terakhir dijalankan**: 2026-09-06, terhadap dev lokal (MariaDB 12.3, API `:3000`). Hasil per item di bawah.
+**Terakhir dijalankan**: 2026-09-06, terhadap dev lokal (SQLite WAL, API `:3000`). Hasil per item di bawah.
 
 ---
 
@@ -128,7 +128,7 @@ grep -rilE 'dockerfile|docker-compose|dockerignore' . | grep -v node_modules
 Butuh server; tidak bisa diuji dari mesin dev.
 
 - [ ] **User DB non-root.** `.env` produksi memakai user `webcafe` dengan password kuat, bukan `root:root`.
-- [ ] **`bind-address = 127.0.0.1`** di MariaDB (default, tapi pastikan). DB tidak boleh mendengarkan dari luar.
+- [ ] **File `data/data.db` tidak ter-expose** via static (sudah di luar `uploads`). DB file tidak boleh bisa diunduh.
 - [ ] **Firewall**: hanya 80/443 (dan SSH) terbuka. Port 3000 dan 3306 tidak boleh terjangkau dari internet — Caddy yang mem-proxy.
 - [ ] **`JWT_SECRET` acak** hasil `openssl rand -hex 32`, bukan nilai contoh. Backend menolak start kalau < 32 karakter, tapi tidak bisa tahu nilainya masih placeholder.
 - [ ] **`NODE_ENV=production`** benar-benar terpasang — ini yang mengaktifkan penyembunyian error dan mematikan CORS terbuka.
