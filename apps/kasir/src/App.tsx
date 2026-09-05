@@ -3,8 +3,11 @@ import { ButuhLogin, Layout } from './components/Layout.js';
 import HalamanLogin from './pages/HalamanLogin.js';
 import HalamanOrderAktif from './pages/HalamanOrderAktif.js';
 import HalamanKasirManual from './pages/HalamanKasirManual.js';
+import HalamanLaporan from './pages/HalamanLaporan.js';
 import HalamanMenu from './pages/HalamanMenu.js';
 import HalamanMeja from './pages/HalamanMeja.js';
+import HalamanPengguna from './pages/HalamanPengguna.js';
+import HalamanPengaturan from './pages/HalamanPengaturan.js';
 
 export default function App() {
   return (
@@ -41,6 +44,30 @@ export default function App() {
           element={
             <ButuhLogin roles={['admin']}>
               <HalamanMeja />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="laporan"
+          element={
+            <ButuhLogin roles={['kasir', 'admin']}>
+              <HalamanLaporan />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="pengguna"
+          element={
+            <ButuhLogin roles={['admin']}>
+              <HalamanPengguna />
+            </ButuhLogin>
+          }
+        />
+        <Route
+          path="pengaturan"
+          element={
+            <ButuhLogin roles={['admin']}>
+              <HalamanPengaturan />
             </ButuhLogin>
           }
         />

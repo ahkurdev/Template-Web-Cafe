@@ -1,6 +1,14 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CafeTable, Category, CategoryWithItems, MenuItem, Settings } from '@cafe/shared';
+import type {
+  CafeTable,
+  Category,
+  CategoryWithItems,
+  MenuItem,
+  Role,
+  Settings,
+  UserPublic,
+} from '@cafe/shared';
 import { api } from '../lib/api.js';
 import { getSocket } from '../lib/socket.js';
 
@@ -179,3 +187,39 @@ export const useSimpanSettings = () => {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 };
+
+// ---------- pengguna ----------
+
+export const usePengguna = () =>
+  useQuery<UserPublic[]>({
+    queryKey: ['users'],
+    queryFn: () => api.get<UserPublic[]>('/auth/users'),
+  });
+
+const invalidasiPengguna = (qc: ReturnType<typeof useQueryClient>) => () => {
+  void qc.invalidateQueries({ queryKey: ['users'] });
+};
+
+export const useBuatPengguna = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { username: string; password: string; name: string; role: Role }) =>
+      api.post<UserPublic>('/auth/users', body),
+    onSuccess: invalidasiPengguna(qc),
+  });
+};
+
+export const useUbahPengguna = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name?: string; role?: Role; isActive?: boolean }) =>
+      api.patch<UserPublic>(`/auth/users/${id}`, body),
+    onSuccess: invalidasiPengguna(qc),
+  });
+};
+
+export const useResetPassword = () =>
+  useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      api.patch<{ ok: boolean }>(`/auth/users/${id}/password`, { password }),
+  });

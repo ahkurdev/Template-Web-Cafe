@@ -17,11 +17,12 @@ Repo ini masih dibangun bertahap. Yang sudah jalan dan terverifikasi:
 - ✅ **Fondasi** — monorepo pnpm, `@cafe/shared`, Prisma schema + migrasi + seed
 - ✅ **Backend core** — 7 module (auth, menu, order, kitchen, table, report, settings), Socket.io, 26 test lulus
 - ✅ **Customer Menu** — resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip
-- ✅ **Kasir** — login + guard role, order aktif realtime + bunyi, detail + timeline, pembayaran & kembalian, kasir manual, struk 58/80mm, CRUD menu + foto + toggle habis, CRUD meja + cetak QR. Bundle 123KB gzip
+- ✅ **Kasir** — login + guard role, order aktif realtime + bunyi, detail + timeline, pembayaran & kembalian, kasir manual, struk 58/80mm, CRUD menu + foto + toggle habis, CRUD meja + cetak QR. Bundle 128KB gzip
 - ✅ **Kitchen Display** — 3 kolom, kartu besar + catatan berlatar, timer & warna menua, bunyi order baru, aksi satu tap, indikator koneksi, wake lock. Bundle 114KB gzip
-- 🚧 **Laporan, manajemen user, pengaturan (UI)** — API sudah ada, halaman belum
+- ✅ **Laporan & admin** — kartu ringkasan, preset rentang, grafik omzet SVG, menu terlaris, metode bayar, export CSV, manajemen user, pengaturan
+- 🚧 **Deployment** — `Caddyfile` + `ecosystem.config.cjs` sudah ada, `scripts/backup.sh` belum; belum diuji di VPS bersih
 
-40 test lulus (14 api + 12 shared + 7 kasir + 7 kds). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
+48 test lulus (14 api + 12 shared + 15 kasir + 7 kds). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
 
 Urutan kerja & *definition of done* per fase: [docs/roadmap.md](./docs/roadmap.md).
 
@@ -37,7 +38,9 @@ Urutan kerja & *definition of done* per fase: [docs/roadmap.md](./docs/roadmap.m
 
 **Meja & QR** — CRUD meja, generate QR per meja (PNG/SVG siap cetak), regenerate token (QR lama langsung mati).
 
-**Laporan** — omzet per rentang tanggal, menu terlaris, rincian per metode bayar, export CSV.
+**Laporan** — omzet per rentang tanggal (preset Hari ini / 7 hari / Bulan ini / Bulan lalu / custom), grafik batang harian-mingguan-bulanan, menu terlaris, rincian per metode bayar, export CSV. Semua laporan hanya menghitung order **lunas** pada waktu pembayaran: order dibuat 23.50 dan dibayar 00.10 masuk omzet hari pembayaran.
+
+**Admin** — manajemen user (buat, ubah role, aktif/nonaktif, reset password) dengan proteksi admin-aktif-terakhir, dan pengaturan pajak/servis/footer struk/auto-confirm.
 
 Fase 2 (belum): stok bahan, multi-outlet (`outletId` sudah disiapkan di semua tabel operasional), QRIS otomatis via webhook.
 

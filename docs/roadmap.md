@@ -21,11 +21,12 @@ Pembaca: Claude Code (saya sendiri) di sesi berikutnya. Kerjakan berurutan. Jang
 - **Fase 1** selesai — monorepo, `packages/shared`, Prisma schema + migrasi + seed, 3 app Vite, `/api/health` → `{"status":"ok","db":"ok"}`.
 - **Fase 2** selesai — 7 module backend, Socket.io, alur penuh terverifikasi lewat HTTP + socket. `pnpm typecheck`/`test`/`build` lulus (26 test).
 - **Fase 3** selesai — customer-menu: resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip.
-- **Fase 4** sebagian — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar. Bundle 123KB gzip. **Belum**: laporan, manajemen user, pengaturan (jadi Fase 6).
+- **Fase 4** selesai — kasir: login + guard role, layout, order aktif realtime, detail + timeline, pembayaran + kembalian, kasir manual, struk 58/80mm, CRUD menu + upload foto + toggle habis, CRUD meja + QR + cetak lembar.
 - **Fase 5** selesai — KDS: login, 3 kolom, kartu besar + catatan berlatar, timer + warna menua, bunyi, aksi satu tap optimistic, indikator koneksi, wakeLock. Bundle 114KB gzip.
-- **Berikutnya**: Fase 6 (admin & laporan) — termasuk sisa Fase 4 (manajemen user, pengaturan).
+- **Fase 6** selesai — laporan (kartu ringkasan, preset rentang, grafik SVG, terlaris, metode bayar, export CSV), manajemen user, pengaturan. Bundle kasir 128KB gzip.
+- **Berikutnya**: Fase 7 (deployment & dokumentasi) — `scripts/backup.sh` dan uji pasang di VPS bersih yang belum ada.
 
-Total 40 test lulus (14 api + 12 shared + 7 kasir + 7 kds).
+Total 48 test lulus (14 api + 12 shared + 15 kasir + 7 kds).
 
 Catatan implementasi yang menyimpang/melengkapi dokumen:
 - `order.pricing.ts` dipisah dari `order.service.ts` supaya logika harga bisa diuji tanpa DB.
@@ -45,6 +46,11 @@ Catatan implementasi yang menyimpang/melengkapi dokumen:
 - KDS menghitung umur kartu dari `createdAt`, bukan dari `elapsedSeconds` milik server — nilai server hanya benar pada saat fetch, jadi timer akan macet antar-refetch.
 - Kolom "Siap" di KDS ditahan 5 menit di sisi klien karena `/kitchen/queue` hanya mengembalikan status aktif dapur. Tanpa penahan, kartu lenyap begitu ditap dan barista tidak tahu tapnya tercatat.
 - `useDetik` (KDS) memakai `setInterval` 1 detik. Ini **bukan** polling data — tidak ada request; hanya tick jam lokal supaya timer di kartu bergerak. Data tetap datang lewat socket.
+- Grafik omzet SVG buatan sendiri (`GrafikOmzet.tsx`, ~120 baris) menggantikan `recharts` yang disebut roadmap. Yang dibutuhkan hanya batang + label + tooltip `<title>`; pustaka chart menambah ~100KB gzip untuk satu halaman. Disertai `<details>` berisi tabel angka — SVG tidak terbaca screen reader per titik, dan owner sering butuh angka persisnya.
+- Unduhan CSV lewat `fetch` + blob + `<a download>`, bukan `<a href>` biasa: endpoint export butuh header `Authorization`.
+- `keInputDate`/`dariInputDate` memakai komponen tanggal **lokal**, bukan `toISOString().slice(0,10)` — potongan ISO menggeser hari untuk pengguna di zona waktu apa pun yang bukan UTC. Ini diuji (8 test) karena laporan yang meleset sehari lebih buruk daripada laporan yang gagal dimuat.
+- Password baru (buat user / reset) ditampilkan sekali di UI sebagai teks agar bisa dicatat; server hanya menyimpan hash argon2id dan tidak pernah mengirim balik. Generator acak memakai `crypto.getRandomValues`, bukan `Math.random`.
+- Form pengaturan menyalin data server ke state **sekali** (`if (data && !f)`) — menyalin setiap render membuat refetch menimpa apa yang sedang diketik.
 
 ## Fase 0 — Prasyarat lokal (sekali, sebelum Fase 1)
 
@@ -186,15 +192,19 @@ Kolom "Siap" menahan kartu 5 menit di sisi klien — `GET /kitchen/queue` hanya 
 
 **Tujuan**: owner bisa tutup buku harian dalam < 1 menit.
 
-1. Dashboard: omzet hari ini, jumlah order, rata-rata per order, order belum bayar.
-2. Filter rentang tanggal + preset (Hari ini, 7 hari, Bulan ini, Custom).
-3. Grafik omzet — `recharts`. Kalau bundle kasir jadi > 500KB gzip, ganti chart SVG buatan sendiri; laporan tidak perlu pustaka besar.
-4. Tabel menu terlaris (qty & nilai), rincian metode pembayaran.
-5. Tombol export CSV (3 jenis) — unduhan langsung dari endpoint.
-6. Manajemen user (admin): CRUD, ubah role, nonaktifkan, reset password.
-7. Pengaturan: nama/alamat cafe, pajak, service, footer struk, `auto_confirm_order`.
+1. ✅ Kartu ringkasan: omzet, jumlah order, rata-rata per order, diskon diberikan.
+2. ✅ Filter rentang + preset (Hari ini, 7 hari, Bulan ini, Bulan lalu, Custom lewat dua `input[type=date]`).
+3. ✅ Grafik omzet — **SVG buatan sendiri**, bukan `recharts`. Toggle harian/mingguan/bulanan. Bundle kasir 128KB gzip; `recharts` akan menambah ~100KB untuk satu halaman.
+4. ✅ Tabel menu terlaris (qty & nilai) + rincian metode pembayaran + subtotal/pajak/servis.
+5. ✅ Export CSV (3 jenis) lewat `fetch` + blob — endpoint butuh header `Authorization` yang tidak bisa dikirim `<a href>`.
+6. ✅ Manajemen user: buat, ubah role, aktif/nonaktif, reset password. Tombol dimatikan untuk admin aktif terakhir.
+7. ✅ Pengaturan: pajak, servis, simbol mata uang, footer struk, `autoConfirmOrder`.
 
 **DoD**: buka laporan bulan berjalan → angka cocok dengan penjumlahan manual data seed → export CSV terbuka benar di Excel (karakter Indonesia utuh, angka bisa di-SUM).
+
+**Terverifikasi** (HTTP nyata terhadap MariaDB lokal): `summary` → omzet 104.000 dari 2 order, rata-rata 52.000, `perMetode` cash 50.000 + qris 54.000 — **cocok dengan penjumlahan manual** · `revenue` konsisten antara `groupBy=day` dan `month` · `top-items` terurut qty desc · tiga CSV terunduh dengan BOM UTF-8 (`ef bb bf`), CRLF, dan angka rupiah polos · rentang > 1 tahun → 400, `dateTo < dateFrom` → 400 · role kasir: `summary` 200, `export` 403, `/auth/users` 403 · admin aktif terakhir tidak bisa diturunkan/dinonaktifkan → 403 · `PATCH /settings` pajak 11% + servis 5% → order baru subtotal 15.000 menghasilkan pajak 1.650, servis 750, total 17.400. **Belum diverifikasi**: CSV dibuka di Excel sungguhan.
+
+Nama/alamat/telepon cafe belum bisa diubah dari UI — masih di tabel `outlets`, diisi saat seed. Butuh endpoint `PATCH /outlet` dulu.
 
 ## Fase 7 — Deployment & dokumentasi
 

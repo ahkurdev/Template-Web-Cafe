@@ -16,8 +16,11 @@ interface Menu {
 const MENU: Menu[] = [
   { ke: '/', label: 'Order Aktif', roles: ['kasir', 'admin'] },
   { ke: '/manual', label: 'Kasir Manual', roles: ['kasir', 'admin'] },
+  { ke: '/laporan', label: 'Laporan', roles: ['kasir', 'admin'] },
   { ke: '/menu', label: 'Menu', roles: ['admin'] },
   { ke: '/meja', label: 'Meja & QR', roles: ['admin'] },
+  { ke: '/pengguna', label: 'Pengguna', roles: ['admin'] },
+  { ke: '/pengaturan', label: 'Pengaturan', roles: ['admin'] },
 ];
 
 export function ButuhLogin({ roles, children }: { roles: Role[]; children: ReactNode }) {
