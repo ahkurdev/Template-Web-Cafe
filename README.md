@@ -1,180 +1,182 @@
 # WebCafe
 
-Sistem operasional cafe: **satu backend, tiga frontend**. Open source, self-hosted, **tanpa Docker**. Dirancang jalan di VPS 1 vCPU / 1GB RAM.
+Bahasa Indonesia version: [readme.id.md](readme.id.md)
 
-| Aplikasi | Akses | Untuk |
+A cafe operating system: **one backend, three frontends**. Open source, self-hosted, **no Docker**. Designed to run on a 1 vCPU / 1GB RAM VPS.
+
+| App | Access | For |
 |---|---|---|
-| **Customer Menu** | publik, `/` | pelanggan scan QR di meja → pesan tanpa login, tanpa install |
-| **Kasir / POS** | login, `/kasir` | input manual, tandai lunas, cetak struk, kelola menu & meja |
-| **Kitchen Display** | login, `/kds` | antrian dapur real-time, FIFO, timer per order |
+| **Customer Menu** | public, `/` | customers scan the QR on the table → order without login, without installing anything |
+| **Cashier / POS** | login, `/kasir` | manual input, mark as paid, print receipts, manage menu & tables |
+| **Kitchen Display** | login, `/kds` | real-time kitchen queue, FIFO, per-order timer |
 
-Realtime lewat WebSocket (Socket.io) — **bukan** polling. Harga disimpan sebagai integer rupiah, tanpa float.
+Real-time via WebSocket (Socket.io) — **not** polling. Prices are stored as integer rupiah, no floats.
 
 ## Status
 
-Repo ini masih dibangun bertahap. Yang sudah jalan dan terverifikasi:
+This repo is still being built in stages. What already works and is verified:
 
-- ✅ **Fondasi** — monorepo pnpm, `@cafe/shared`, Prisma schema + migrasi + seed
-- ✅ **Backend core** — 7 module (auth, menu, order, kitchen, table, report, settings), Socket.io, 26 test lulus
-- ✅ **Customer Menu** — resolve QR, katalog + badge Habis realtime, keranjang, checkout, halaman status. Bundle 117KB gzip
-- ✅ **Kasir** — login + guard role, order aktif realtime + bunyi, detail + timeline, pembayaran & kembalian, kasir manual, struk 58/80mm, CRUD menu + foto + toggle habis, CRUD meja + cetak QR. Bundle 128KB gzip
-- ✅ **Kitchen Display** — 3 kolom, kartu besar + catatan berlatar, timer & warna menua, bunyi order baru, aksi satu tap, indikator koneksi, wake lock. Bundle 114KB gzip
-- ✅ **Laporan & admin** — kartu ringkasan, preset rentang, grafik omzet SVG, menu terlaris, metode bayar, export CSV, manajemen user, pengaturan
-- ✅ **Deployment** — `Caddyfile`, `ecosystem.config.cjs`, `scripts/backup.sh` (restore sudah diuji ke DB terpisah), checklist keamanan
-- 🚧 **Uji VPS bersih** — belum dikerjakan; butuh server
+- ✅ **Foundation** — pnpm monorepo, `@cafe/shared`, Prisma schema + migrations + seed
+- ✅ **Backend core** — 7 modules (auth, menu, order, kitchen, table, report, settings), Socket.io, 26 tests passing
+- ✅ **Customer Menu** — QR resolving, catalogue + real-time Sold Out badge, cart, checkout, status page. 117KB gzip bundle
+- ✅ **Cashier** — login + role guard, live active orders + sound, details + timeline, payment & change, manual cashier, 58/80mm receipts, menu CRUD + photos + sold-out toggle, table CRUD + QR printing. 128KB gzip bundle
+- ✅ **Kitchen Display** — 3 columns, large cards + background notes, timer & ageing colours, new-order sound, one-tap actions, connection indicator, wake lock. 114KB gzip bundle
+- ✅ **Reports & admin** — summary cards, range presets, SVG revenue chart, best-selling menu, payment methods, CSV export, user management, settings
+- ✅ **Deployment** — `Caddyfile`, `ecosystem.config.cjs`, `scripts/backup.sh` (restore already tested against a separate DB), security checklist
+- 🚧 **Clean VPS test** — not done yet; needs a server
 
-48 test lulus (14 api + 12 shared + 15 kasir + 7 kds). Cetak struk baru diuji lewat print preview, belum ke printer thermal fisik.
+48 tests passing (14 api + 12 shared + 15 kasir + 7 kds). Receipt printing has only been tested via print preview, not yet on a physical thermal printer.
 
-Urutan kerja & *definition of done* per fase: [docs/roadmap.md](./docs/roadmap.md).
+Work order & *definition of done* per phase: [docs/roadmap.md](./docs/roadmap.md).
 
-## Fitur
+## Features
 
-**Menu digital** — kategori berurut, foto (auto-resize ke `.webp`), toggle habis/tersedia yang efeknya muncul real-time di semua app terbuka.
+**Digital menu** — ordered categories, photos (auto-resized to `.webp`), sold-out/available toggle whose effect appears real-time in all open apps.
 
-**Order pelanggan** — scan QR → meja terdeteksi dari token. Keranjang dengan catatan per item. Checkout tanpa akun. **Total dihitung server**, harga diambil dari DB, tidak pernah dari body request. Item yang jadi habis di tengah checkout → 409 beserta nama itemnya.
+**Customer orders** — scan QR → table detected from the token. Cart with per-item notes. Checkout without an account. **Totals are computed on the server**, prices taken from the DB, never from the request body. An item that becomes sold out mid-checkout → 409 with the item's name.
 
-**Tracking status** — `baru` → `dikonfirmasi` → `diproses` → `selesai` → `diambil` (plus `dibatalkan`). Pelanggan lihat perubahan tanpa refresh; halaman status bisa dibuka ulang lewat kode order.
+**Status tracking** — `baru` → `dikonfirmasi` → `diproses` → `selesai` → `diambil` (plus `dibatalkan`). Customers see changes without refreshing; the status page can be reopened via the order code.
 
-**Kasir** — order manual walk-in/takeaway, daftar order aktif live, pembayaran `cash` (hitung kembalian) / `transfer` / `qris_manual`, cetak struk via `window.print()` + CSS `@media print` (thermal 58/80mm).
+**Cashier** — manual walk-in/takeaway orders, live active order list, `cash` payment (change calculation) / `transfer` / `qris_manual`, receipt printing via `window.print()` + CSS `@media print` (thermal 58/80mm).
 
-**Meja & QR** — CRUD meja, generate QR per meja (PNG/SVG siap cetak), regenerate token (QR lama langsung mati).
+**Tables & QR** — table CRUD, generate QR per table (print-ready PNG/SVG), regenerate token (old QR dies immediately).
 
-**Laporan** — omzet per rentang tanggal (preset Hari ini / 7 hari / Bulan ini / Bulan lalu / custom), grafik batang harian-mingguan-bulanan, menu terlaris, rincian per metode bayar, export CSV. Semua laporan hanya menghitung order **lunas** pada waktu pembayaran: order dibuat 23.50 dan dibayar 00.10 masuk omzet hari pembayaran.
+**Reports** — revenue per date range (presets Today / 7 days / This month / Last month / custom), daily-weekly-monthly bar charts, best-selling menu, breakdown per payment method, CSV export. All reports only count **paid** orders at payment time: an order created at 23.50 and paid at 00.10 counts towards the payment day's revenue.
 
-**Admin** — manajemen user (buat, ubah role, aktif/nonaktif, reset password) dengan proteksi admin-aktif-terakhir, dan pengaturan pajak/servis/footer struk/auto-confirm.
+**Admin** — user management (create, change role, activate/deactivate, reset password) with last-active-admin protection, and settings for tax/service/receipt footer/auto-confirm.
 
-Fase 2 (belum): stok bahan, multi-outlet (`outletId` sudah disiapkan di semua tabel operasional), QRIS otomatis via webhook.
+Phase 2 (not yet): ingredient stock, multi-outlet (`outletId` already prepared in all operational tables), automatic QRIS via webhook.
 
 ## Stack
 
-| Lapisan | Pilihan | Alasan singkat |
+| Layer | Choice | Brief reason |
 |---|---|---|
-| Runtime | Node.js 22 LTS | `sharp` matang, PM2 first-class |
-| HTTP | Fastify 5 | ~2× throughput Express, plugin resmi lengkap |
-| Realtime | Socket.io 4 | room bawaan, auto-reconnect, fallback untuk HP/proxy jelek |
-| ORM | Prisma 6 | migrasi terversi, tipe di-generate |
-| Database | MariaDB 11 (InnoDB, `utf8mb4`) | tooling melimpah, backup & replikasi matang |
-| Frontend | React 19 + Vite + TypeScript + Tailwind 4 | tiga app terpisah, stack identik |
-| Validasi | Zod di semua boundary | satu skema dipakai server & klien |
-| Auth | `@fastify/jwt` + `argon2id` | stateless, tanpa Redis |
-| Deploy | PM2 + Caddy | native, TLS otomatis, tanpa container |
+| Runtime | Node.js 22 LTS | `sharp` is mature, PM2 first-class |
+| HTTP | Fastify 5 | ~2× Express throughput, complete official plugin set |
+| Realtime | Socket.io 4 | built-in rooms, auto-reconnect, fallback for bad phones/proxies |
+| ORM | Prisma 6 | versioned migrations, generated types |
+| Database | MariaDB 11 (InnoDB, `utf8mb4`) | abundant tooling, mature backup & replication |
+| Frontend | React 19 + Vite + TypeScript + Tailwind 4 | three separate apps, identical stack |
+| Validation | Zod on all boundaries | one schema used by server & client |
+| Auth | `@fastify/jwt` + `argon2id` | stateless, no Redis |
+| Deploy | PM2 + Caddy | native, automatic TLS, no containers |
 
-Monolith modular — bukan microservices. Tiap module backend punya `routes` / `service` / `repository` terpisah, dan module lain hanya boleh masuk lewat `service`.
+Modular monolith — not microservices. Each backend module has separate `routes` / `service` / `repository`, and other modules may only enter through `service`.
 
-## Struktur
+## Structure
 
 ```
 apps/
-  api/                 # Fastify — satu-satunya proses Node
-    prisma/            # schema.prisma + migrations (di-commit)
+  api/                 # Fastify — the only Node process
+    prisma/            # schema.prisma + migrations (committed)
     src/modules/       # auth · menu · order · kitchen · table · report · settings
-  customer-menu/       # publik  → /
+  customer-menu/       # public  → /
   kasir/               # staff   → /kasir
   kitchen-display/     # staff   → /kds
 packages/
-  shared/              # @cafe/shared — skema Zod, tipe, money.ts, events.ts
+  shared/              # @cafe/shared — Zod schemas, types, money.ts, events.ts
 docs/                  # prd · arsitektur · database · api · roadmap · agent
 ```
 
-`apps/*` boleh pakai `packages/*`. Sebaliknya tidak. Antar `apps/*` tidak boleh saling impor — kontrak lintas app hanya lewat `@cafe/shared`.
+`apps/*` may use `packages/*`. Not the other way round. `apps/*` may not import each other — the cross-app contract is only via `@cafe/shared`.
 
-## Jalan di lokal
+## Running Locally
 
-Butuh **Node ≥ 22**, **pnpm 11**, dan **MariaDB 11** hidup di `localhost:3306`.
+Requires **Node ≥ 22**, **pnpm 11**, and **MariaDB 11** running on `localhost:3306`.
 
 ```bash
 # 1. Database
 mysql -u root -proot -e "CREATE DATABASE webcafe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-# 2. Konfigurasi
+# 2. Configuration
 cp .env.example .env
-# lalu isi JWT_SECRET di .env:  openssl rand -hex 32
+# then fill in JWT_SECRET in .env:  openssl rand -hex 32
 
-# 3. Dependensi + skema + data awal
+# 3. Dependencies + schema + initial data
 pnpm install
 pnpm db:migrate
-pnpm db:seed          # buat user admin — passwordnya dicetak sekali ke stdout
+pnpm db:seed          # creates the admin user — password printed once to stdout
 
-# 4. Jalan
+# 4. Run
 pnpm dev
 ```
 
-| Alamat | App |
+| Address | App |
 |---|---|
 | http://localhost:5173 | Customer Menu |
 | http://localhost:5174 | Kasir |
 | http://localhost:5175 | Kitchen Display |
-| http://localhost:3000/api/health | API — balas `{"status":"ok","db":"ok","uptime":N}` |
+| http://localhost:3000/api/health | API — replies `{"status":"ok","db":"ok","uptime":N}` |
 
-Vite mem-proxy `/api`, `/uploads`, dan `/socket.io` ke `:3000`, jadi tidak ada urusan CORS baik di dev maupun produksi.
+Vite proxies `/api`, `/uploads`, and `/socket.io` to `:3000`, so there are no CORS issues in dev or production.
 
-### Perintah
+### Commands
 
 ```bash
-pnpm dev          # semua app paralel
-pnpm build        # build shared → api → 3 frontend
+pnpm dev          # all apps in parallel
+pnpm build        # build shared → api → 3 frontends
 pnpm test         # vitest
-pnpm typecheck    # tsc --noEmit di semua paket
+pnpm typecheck    # tsc --noEmit in all packages
 
-pnpm db:migrate   # dev  — prisma migrate dev (bikin file migrasi baru)
-pnpm db:deploy    # prod — prisma migrate deploy (tanpa prompt, tanpa reset)
-pnpm db:studio    # GUI Prisma Studio :5555
-pnpm db:seed      # data awal, idempoten
+pnpm db:migrate   # dev  — prisma migrate dev (creates new migration files)
+pnpm db:deploy    # prod — prisma migrate deploy (no prompt, no reset)
+pnpm db:studio    # Prisma Studio GUI :5555
+pnpm db:seed      # initial data, idempotent
 ```
 
-> **Jangan** `pnpm db:migrate` di produksi. `migrate dev` bisa menawarkan reset database saat mendeteksi drift — di server itu berarti seluruh data order hilang. Pakai `pnpm db:deploy`.
+> **Do not** run `pnpm db:migrate` in production. `migrate dev` may offer a database reset when it detects drift — on the server that means all order data is lost. Use `pnpm db:deploy`.
 
-## Deploy ke VPS
+## Deploying to a VPS
 
-Ringkasnya: swap 2GB dulu, tuning `my.cnf`, `pnpm build`, `pm2 start`, Caddy sebagai TLS + router. Langkah lengkap beserta alasan tiap angka ada di [docs/arsitektur.md](./docs/arsitektur.md#deployment-tanpa-docker) — termasuk file `my.cnf`, `ecosystem.config.cjs`, `Caddyfile`, prosedur update, dan backup.
+In short: 2GB swap first, tune `my.cnf`, `pnpm build`, `pm2 start`, Caddy as TLS + router. Full steps with the reasoning behind each number are in [docs/arsitektur.md](./docs/arsitektur.md#deployment-tanpa-docker) — including the `my.cnf`, `ecosystem.config.cjs`, `Caddyfile` files, update procedure, and backup.
 
-Yang wajib diingat:
+Things to remember:
 
-- **Swap 2GB sebelum apa pun.** MariaDB di 1GB RAM tanpa swap rawan OOM-kill.
-- **`build-essential` wajib.** Tanpa Docker, `sharp` dikompilasi di mesin itu.
-- **User DB non-root** + `bind-address = 127.0.0.1`. `root:root` di `.env.example` hanya untuk dev lokal.
-- **`instances: 1` di PM2.** Socket.io multi-proses butuh adapter Redis; tanpa itu order baru cuma sampai ke klien yang kebetulan terhubung ke proses yang sama.
-- **`trustProxy: true` di Fastify** (sudah diset). Tanpa itu, di belakang Caddy semua request terlihat dari `127.0.0.1` dan satu pelanggan menghabiskan kuota rate limit semua orang.
+- **2GB swap before anything else.** MariaDB on 1GB RAM without swap is prone to OOM-kill.
+- **`build-essential` is required.** Without Docker, `sharp` is compiled on the machine itself.
+- **Non-root DB user** + `bind-address = 127.0.0.1`. `root:root` in `.env.example` is only for local dev.
+- **`instances: 1` in PM2.** Socket.io multi-process needs a Redis adapter; without it, new orders only reach clients that happen to be connected to the same process.
+- **`trustProxy: true` in Fastify** (already set). Without it, behind Caddy all requests look like they come from `127.0.0.1` and one customer consumes the rate limit quota for everyone.
 
-Jalankan [checklist keamanan](./docs/keamanan.md) sebelum sistem menghadap internet.
+Run the [security checklist](./docs/keamanan.md) before the system faces the internet.
 
 ### Backup
 
 ```bash
-# uji dulu
+# test first
 BACKUP_DIR=/tmp/uji-backup ./scripts/backup.sh
 
-# cron harian 02.15
+# daily cron 02.15
 15 2 * * * /var/www/web-cafe/scripts/backup.sh >> /var/log/webcafe-backup.log 2>&1
 ```
 
-Dump di-validasi (ukuran + `gzip -t`) sebelum rotasi, jadi backup rusak tidak menghapus backup lama. Prosedur restore ada sebagai komentar di bawah `scripts/backup.sh` — **uji restore sekali** sebelum mengandalkannya, dan simpan salinan di luar VPS.
+Dumps are validated (size + `gzip -t`) before rotation, so a broken backup does not delete old backups. The restore procedure is commented below `scripts/backup.sh` — **test the restore once** before relying on it, and keep a copy outside the VPS.
 
-## Dokumentasi
+## Documentation
 
-| Dokumen | Isi |
+| Document | Contents |
 |---|---|
-| [prd.md](./docs/prd.md) | masalah, target user, fitur MVP vs nice-to-have, NFR, batasan, metrik |
-| [arsitektur.md](./docs/arsitektur.md) | prinsip, diagram, tech stack + alasan, alur realtime, deployment |
-| [database.md](./docs/database.md) | tabel, kolom, relasi, index, catatan portabilitas |
-| [api.md](./docs/api.md) | endpoint REST per module, event socket + room/payload, format response, rate limit |
-| [roadmap.md](./docs/roadmap.md) | fase build berurutan + *definition of done* |
-| [keamanan.md](./docs/keamanan.md) | checklist pra-publik: rute publik, batas role, upload, rate limit + item VPS yang wajib dicek |
-| [agent.md](./docs/agent.md) | aturan repo untuk AI agent yang melanjutkan kerja di sini |
+| [prd.md](./docs/prd.md) | problem, target users, MVP vs nice-to-have features, NFRs, constraints, metrics |
+| [arsitektur.md](./docs/arsitektur.md) | principles, diagrams, tech stack + reasons, real-time flow, deployment |
+| [database.md](./docs/database.md) | tables, columns, relations, indexes, portability notes |
+| [api.md](./docs/api.md) | REST endpoints per module, socket events + rooms/payloads, response format, rate limits |
+| [roadmap.md](./docs/roadmap.md) | build phases in order + *definition of done* |
+| [keamanan.md](./docs/keamanan.md) | pre-launch checklist: public routes, role limits, uploads, rate limits + VPS items that must be checked |
+| [agent.md](./docs/agent.md) | repo rules for AI agents continuing work here |
 
-## Kontribusi
+## Contributing
 
-Aturan yang ditegakkan di repo ini:
+Rules enforced in this repo:
 
-- Package manager **pnpm**. Jangan campur lockfile.
-- Uang selalu `Int` rupiah penuh, semua aritmetika lewat `@cafe/shared/money`. `parseFloat`/`Decimal` di jalur uang **dilarang**.
-- Validasi Zod di semua boundary, skema di `packages/shared/src/schemas.ts`.
-- Emit event Socket.io **setelah** transaksi commit, tidak di dalamnya.
-- Batas lapisan: `routes` → `service` → `repository`. Routes tidak memanggil repository.
-- `any` dilarang di kode baru.
-- Tanpa Docker — `Dockerfile`/`docker-compose.yml` tidak akan di-merge.
-- `pnpm typecheck`, `pnpm build`, `pnpm test` harus lulus sebelum PR.
+- Package manager **pnpm**. Don't mix lockfiles.
+- Money is always full `Int` rupiah, all arithmetic via `@cafe/shared/money`. `parseFloat`/`Decimal` on the money path is **forbidden**.
+- Zod validation on all boundaries, schemas in `packages/shared/src/schemas.ts`.
+- Emit Socket.io events **after** the transaction commits, not inside it.
+- Layer boundaries: `routes` → `service` → `repository`. Routes do not call the repository.
+- `any` is forbidden in new code.
+- No Docker — `Dockerfile`/`docker-compose.yml` will not be merged.
+- `pnpm typecheck`, `pnpm build`, `pnpm test` must pass before a PR.
 
-## Lisensi
+## License
 
 [MIT](./LICENSE)
